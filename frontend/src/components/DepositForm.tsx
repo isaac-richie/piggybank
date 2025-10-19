@@ -5,7 +5,7 @@ import { useAccount } from 'wagmi';
 import { useContractWrite, useUSDC } from '@/hooks/useContract';
 import { LOCK_DURATIONS, type LockDuration } from '@/lib/contracts';
 import { parseUSDC, parseETH } from '@/lib/utils';
-import { DollarSign, Coins, Clock, User } from 'lucide-react';
+import { DollarSign, Coins, Clock } from 'lucide-react';
 
 export function DepositForm() {
   const { address } = useAccount();
@@ -22,7 +22,6 @@ export function DepositForm() {
   const [depositType, setDepositType] = useState<'USDC' | 'ETH'>('USDC');
   const [amount, setAmount] = useState('');
   const [lockDuration, setLockDuration] = useState<LockDuration>('3 mins');
-  const [beneficiary, setBeneficiary] = useState(address || '');
   const [isApproving, setIsApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -44,7 +43,7 @@ export function DepositForm() {
   const handleDeposit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!amount || !beneficiary) {
+    if (!amount || !address) {
       setError('Please fill in all fields');
       return;
     }
@@ -59,7 +58,7 @@ export function DepositForm() {
         const amountBigInt = parseUSDC(amount);
         const allowanceBigInt = parseUSDC(allowance);
         
-        console.log('USDC Deposit:', { amount, amountBigInt, allowanceBigInt, duration, beneficiary });
+        console.log('USDC Deposit:', { amount, amountBigInt, allowanceBigInt, duration, beneficiary: address });
         
         if (amountBigInt > allowanceBigInt) {
           console.log('Approving USDC...');
@@ -69,12 +68,12 @@ export function DepositForm() {
           console.log('USDC approved, now depositing...');
         }
         
-        await depositUSDC(amount, BigInt(duration), beneficiary);
+        await depositUSDC(amount, BigInt(duration), address);
         // Success will be shown by useEffect when isSuccess becomes true
       } else {
         const amountBigInt = parseETH(amount);
-        console.log('ETH Deposit:', { amount, amountBigInt, duration, beneficiary });
-        await depositETH(BigInt(duration), beneficiary, amountBigInt);
+        console.log('ETH Deposit:', { amount, amountBigInt, duration, beneficiary: address });
+        await depositETH(BigInt(duration), address, amountBigInt);
         // Success will be shown by useEffect when isSuccess becomes true
       }
     } catch (error) {
@@ -176,24 +175,6 @@ export function DepositForm() {
                 </div>
               </button>
             ))}
-          </div>
-        </div>
-
-        {/* Beneficiary */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Beneficiary Address
-          </label>
-          <div className="relative">
-            <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              value={beneficiary}
-              onChange={(e) => setBeneficiary(e.target.value)}
-              placeholder="0x..."
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
-            />
           </div>
         </div>
 

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTimelockPiggyBank, useDeposit, useContractWrite } from '@/hooks/useContract';
 import { formatUSDC, formatETH, formatDateTime, getTimeRemaining, isDepositUnlocked } from '@/lib/utils';
-import { Clock, DollarSign, User, ArrowRight, CheckCircle, Lock } from 'lucide-react';
+import { Clock, DollarSign, ArrowRight, CheckCircle, Lock } from 'lucide-react';
 
 export function MyDeposits() {
   const { depositCount, refetchAll: refetchContract } = useTimelockPiggyBank();
@@ -164,7 +164,7 @@ function DepositCard({
     );
   }
 
-  const { amount, lockDuration, depositTime, beneficiary, isWithdrawn, isETH } = deposit;
+  const { amount, lockDuration, depositTime, isWithdrawn, isETH } = deposit;
   const unlocked = isDepositUnlocked(depositTime, lockDuration);
   const timeRemaining = getTimeRemaining(depositTime, lockDuration);
 
@@ -205,20 +205,11 @@ function DepositCard({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 mb-4">
-        <div>
-          <p className="text-sm text-gray-600">Amount</p>
-          <p className="font-semibold text-gray-900">
-            {isETH ? formatETH(amount) : formatUSDC(amount)} {isETH ? 'ETH' : 'USDC'}
-          </p>
-        </div>
-        <div>
-          <p className="text-sm text-gray-600">Beneficiary</p>
-          <p className="font-semibold text-gray-900 flex items-center">
-            <User className="h-4 w-4 mr-1" />
-            {beneficiary.slice(0, 6)}...{beneficiary.slice(-4)}
-          </p>
-        </div>
+      <div className="mb-4">
+        <p className="text-sm text-gray-600">Amount</p>
+        <p className="text-2xl font-bold text-gray-900">
+          {isETH ? formatETH(amount) : formatUSDC(amount)} {isETH ? 'ETH' : 'USDC'}
+        </p>
       </div>
 
       {!isWithdrawn && (
