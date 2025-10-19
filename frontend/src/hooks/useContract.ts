@@ -1,7 +1,7 @@
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { useAccount } from 'wagmi';
 import { CONTRACT_ADDRESS, USDC_ADDRESS, TIMELOCK_PIGGY_BANK_ABI, USDC_ABI } from '@/lib/contracts';
-import { parseUSDC, parseETH, formatUSDC, formatETH } from '@/lib/utils';
+import { parseUSDC, formatUSDC, formatETH } from '@/lib/utils';
 
 // Hook for reading contract data
 export const useTimelockPiggyBank = () => {

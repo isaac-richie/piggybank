@@ -17,9 +17,7 @@ contract DeployScript is Script {
         usdcAddresses["arbitrum"] = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831; // USDC on Arbitrum
         usdcAddresses["optimism"] = 0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85; // USDC on Optimism
         usdcAddresses["base"] = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // USDC on Base
-        usdcAddresses[
-            "base-sepolia"
-        ] = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // USDC on Base Sepolia
+        usdcAddresses["base-sepolia"] = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // USDC on Base Sepolia
     }
 
     function run() public {
@@ -31,12 +29,8 @@ contract DeployScript is Script {
         address usdcAddress = usdcAddresses[network];
         if (usdcAddress == address(0)) {
             console.log("USDC address not found for network:", network);
-            console.log(
-                "Please update the script with the correct USDC address for this network."
-            );
-            console.log(
-                "For local testing, you can deploy a mock USDC token first."
-            );
+            console.log("Please update the script with the correct USDC address for this network.");
+            console.log("For local testing, you can deploy a mock USDC token first.");
             return;
         }
 
@@ -45,16 +39,11 @@ contract DeployScript is Script {
         // Deploy the contract
         vm.startBroadcast();
 
-        TimelockPiggyBank timelockPiggyBank = new TimelockPiggyBank(
-            usdcAddress
-        );
+        TimelockPiggyBank timelockPiggyBank = new TimelockPiggyBank(usdcAddress);
 
         vm.stopBroadcast();
 
-        console.log(
-            "TimelockPiggyBank deployed to: %s",
-            address(timelockPiggyBank)
-        );
+        console.log("TimelockPiggyBank deployed to: %s", address(timelockPiggyBank));
 
         // Verify the deployment
         console.log("Verifying deployment...");
@@ -64,38 +53,22 @@ contract DeployScript is Script {
         console.logAddress(address(timelockPiggyBank.usdcToken()));
 
         // Get valid lock durations
-        uint256[] memory lockDurations = timelockPiggyBank
-            .getValidLockDurations();
+        uint256[] memory lockDurations = timelockPiggyBank.getValidLockDurations();
         console.log("Valid lock durations:");
         for (uint256 i = 0; i < lockDurations.length; i++) {
             uint256 months = lockDurations[i] / (30 * 24 * 60 * 60);
-            console.log(
-                "  %d. %d seconds (%d months)",
-                i + 1,
-                lockDurations[i],
-                months
-            );
+            console.log("  %d. %d seconds (%d months)", i + 1, lockDurations[i], months);
         }
 
         console.log("\nDeployment completed successfully!");
         console.log("\nNext steps:");
-        console.log(
-            "1. Verify the contract on Etherscan (if on mainnet/testnet)"
-        );
-        console.log(
-            "2. Users need to approve the contract to spend their USDC"
-        );
-        console.log(
-            "3. Users can then call deposit() with their desired lock duration"
-        );
+        console.log("1. Verify the contract on Etherscan (if on mainnet/testnet)");
+        console.log("2. Users need to approve the contract to spend their USDC");
+        console.log("3. Users can then call deposit() with their desired lock duration");
         console.log("\nExample usage:");
         console.log(
-            "const contract = await ethers.getContractAt('TimelockPiggyBank', '%s');",
-            address(timelockPiggyBank)
+            "const contract = await ethers.getContractAt('TimelockPiggyBank', '%s');", address(timelockPiggyBank)
         );
-        console.log(
-            "await contract.deposit(ethers.parseUnits('100', 6), %d, userAddress);",
-            lockDurations[0]
-        );
+        console.log("await contract.deposit(ethers.parseUnits('100', 6), %d, userAddress);", lockDurations[0]);
     }
 }

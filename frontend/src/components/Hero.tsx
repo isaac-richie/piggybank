@@ -1,6 +1,6 @@
 'use client';
 
-import { ArrowRight, Lock, DollarSign, Clock } from 'lucide-react';
+import { Lock, DollarSign, Clock } from 'lucide-react';
 
 export function Hero() {
   return (

@@ -1,13 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount } from 'wagmi';
 import { useTimelockPiggyBank, useDeposit, useContractWrite } from '@/hooks/useContract';
 import { formatUSDC, formatETH, formatDateTime, getTimeRemaining, isDepositUnlocked } from '@/lib/utils';
 import { Clock, DollarSign, User, ArrowRight, CheckCircle, Lock } from 'lucide-react';
 
 export function MyDeposits() {
-  const { address } = useAccount();
   const { depositCount, refetchAll: refetchContract } = useTimelockPiggyBank();
   const { withdraw, forwardDeposit, isPending, isSuccess } = useContractWrite();
   const [forwardingTo, setForwardingTo] = useState<{ [key: number]: string }>({});
