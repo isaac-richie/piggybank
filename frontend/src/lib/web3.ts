@@ -1,5 +1,5 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { baseSepolia } from 'wagmi/chains';
+import { base } from 'wagmi/chains';
 import { NETWORK_CONFIG } from './contracts';
 
 export const config = getDefaultConfig({
@@ -7,7 +7,7 @@ export const config = getDefaultConfig({
   projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'your-project-id',
   chains: [
     {
-      ...baseSepolia,
+      ...base,
       rpcUrls: {
         default: {
           http: [NETWORK_CONFIG.rpcUrl],

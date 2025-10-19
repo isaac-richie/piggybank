@@ -5,10 +5,12 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../src/TimelockPiggyBank.sol";
 import "../src/MockUSDC.sol";
+import "../src/MockWBTC.sol";
 
 contract SecurityTest is Test {
     TimelockPiggyBank public timelockPiggyBank;
     MockUSDC public mockUSDC;
+    MockWBTC public mockWBTC;
 
     address public owner;
     address public user1;
@@ -18,14 +20,18 @@ contract SecurityTest is Test {
 
     // Test amounts
     uint256 public constant USDC_100 = 100 * 10 ** 6; // 100 USDC (6 decimals)
-    uint256 public constant LOCK_3_MONTHS = 3 minutes;
+    uint256 public constant LOCK_3_MONTHS = 90 days;
 
     function setUp() public {
-        // Deploy MockUSDC
+        // Deploy Mock tokens
         mockUSDC = new MockUSDC();
+        mockWBTC = new MockWBTC();
 
-        // Deploy TimelockPiggyBank with MockUSDC
-        timelockPiggyBank = new TimelockPiggyBank(address(mockUSDC));
+        // Deploy TimelockPiggyBank
+        timelockPiggyBank = new TimelockPiggyBank(
+            address(mockUSDC),
+            address(mockWBTC)
+        );
 
         // Set up addresses
         owner = address(this);
@@ -46,20 +52,24 @@ contract SecurityTest is Test {
     }
 
     function testHackerCannotWithdrawOtherUsersDeposit() public {
-        console.log("=== Testing: Hacker tries to withdraw other user's deposit ===");
+        console.log(
+            "=== Testing: Hacker tries to withdraw other user's deposit ==="
+        );
 
         // User1 deposits USDC
         vm.prank(user1);
         mockUSDC.approve(address(timelockPiggyBank), USDC_100);
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Fast forward time to after unlock
         vm.warp(block.timestamp + LOCK_3_MONTHS + 1);
 
         // Check initial balances
         uint256 initialHackerBalance = mockUSDC.balanceOf(hacker);
-        uint256 initialContractBalance = mockUSDC.balanceOf(address(timelockPiggyBank));
+        uint256 initialContractBalance = mockUSDC.balanceOf(
+            address(timelockPiggyBank)
+        );
 
         console.log("Initial hacker USDC balance:", initialHackerBalance);
         console.log("Initial contract USDC balance:", initialContractBalance);
@@ -71,12 +81,24 @@ contract SecurityTest is Test {
 
         // Check balances haven't changed
         uint256 finalHackerBalance = mockUSDC.balanceOf(hacker);
-        uint256 finalContractBalance = mockUSDC.balanceOf(address(timelockPiggyBank));
+        uint256 finalContractBalance = mockUSDC.balanceOf(
+            address(timelockPiggyBank)
+        );
 
-        assertEq(finalHackerBalance, initialHackerBalance, "Hacker balance should not change");
-        assertEq(finalContractBalance, initialContractBalance, "Contract balance should not change");
+        assertEq(
+            finalHackerBalance,
+            initialHackerBalance,
+            "Hacker balance should not change"
+        );
+        assertEq(
+            finalContractBalance,
+            initialContractBalance,
+            "Contract balance should not change"
+        );
 
-        console.log("Hacker correctly blocked from withdrawing other user's deposit");
+        console.log(
+            "Hacker correctly blocked from withdrawing other user's deposit"
+        );
     }
 
     function testHackerCannotWithdrawBeforeUnlock() public {
@@ -86,7 +108,7 @@ contract SecurityTest is Test {
         vm.prank(hacker);
         mockUSDC.approve(address(timelockPiggyBank), USDC_100);
         vm.prank(hacker);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Try to withdraw before unlock (should fail)
         vm.prank(hacker);
@@ -97,24 +119,30 @@ contract SecurityTest is Test {
     }
 
     function testHackerCannotWithdrawNonExistentDeposit() public {
-        console.log("=== Testing: Hacker tries to withdraw non-existent deposit ===");
+        console.log(
+            "=== Testing: Hacker tries to withdraw non-existent deposit ==="
+        );
 
         // Hacker tries to withdraw deposit that doesn't exist
         vm.prank(hacker);
         vm.expectRevert(); // Should revert because deposit doesn't exist
         timelockPiggyBank.withdraw(0);
 
-        console.log("Hacker correctly blocked from withdrawing non-existent deposit");
+        console.log(
+            "Hacker correctly blocked from withdrawing non-existent deposit"
+        );
     }
 
     function testHackerCannotForwardOtherUsersDeposit() public {
-        console.log("=== Testing: Hacker tries to forward other user's deposit ===");
+        console.log(
+            "=== Testing: Hacker tries to forward other user's deposit ==="
+        );
 
         // User1 deposits USDC
         vm.prank(user1);
         mockUSDC.approve(address(timelockPiggyBank), USDC_100);
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Fast forward time to after unlock
         vm.warp(block.timestamp + LOCK_3_MONTHS + 1);
@@ -124,17 +152,21 @@ contract SecurityTest is Test {
         vm.expectRevert(); // Should revert because hacker doesn't own the deposit
         timelockPiggyBank.forwardDeposit(0, hacker);
 
-        console.log("Hacker correctly blocked from forwarding other user's deposit");
+        console.log(
+            "Hacker correctly blocked from forwarding other user's deposit"
+        );
     }
 
     function testHackerCannotWithdrawAlreadyWithdrawnDeposit() public {
-        console.log("=== Testing: Hacker tries to withdraw already withdrawn deposit ===");
+        console.log(
+            "=== Testing: Hacker tries to withdraw already withdrawn deposit ==="
+        );
 
         // Hacker deposits USDC
         vm.prank(hacker);
         mockUSDC.approve(address(timelockPiggyBank), USDC_100);
         vm.prank(hacker);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Fast forward time to after unlock
         vm.warp(block.timestamp + LOCK_3_MONTHS + 1);
@@ -148,7 +180,9 @@ contract SecurityTest is Test {
         vm.expectRevert(); // Should revert because already withdrawn
         timelockPiggyBank.withdraw(0);
 
-        console.log("Hacker correctly blocked from withdrawing already withdrawn deposit");
+        console.log(
+            "Hacker correctly blocked from withdrawing already withdrawn deposit"
+        );
     }
 
     function testHackerCannotAccessAdminFunctions() public {
@@ -189,17 +223,23 @@ contract SecurityTest is Test {
         vm.prank(user1);
         mockUSDC.approve(address(timelockPiggyBank), USDC_100);
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Hacker tries to directly call internal functions (should fail)
         // Note: These functions are internal, so they can't be called directly
         // But let's test that the deposit data is immutable
 
         // Check that deposit data is correct and immutable
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(user1, 0);
-        assertEq(deposit.amount, USDC_100, "Deposit amount should be immutable");
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
+            user1,
+            0
+        );
+        assertEq(
+            deposit.amount,
+            USDC_100,
+            "Deposit amount should be immutable"
+        );
         assertEq(deposit.lockDuration, LOCK_3_MONTHS, "Lock duration should be immutable");
-        assertEq(deposit.beneficiary, beneficiary, "Beneficiary should be immutable");
         assertEq(deposit.isWithdrawn, false, "Withdrawn status should be immutable");
 
         console.log("Deposit data is correctly immutable");
@@ -212,7 +252,7 @@ contract SecurityTest is Test {
         vm.prank(hacker);
         mockUSDC.approve(address(timelockPiggyBank), USDC_100);
         vm.prank(hacker);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Fast forward time to after unlock
         vm.warp(block.timestamp + LOCK_3_MONTHS + 1);
@@ -224,14 +264,23 @@ contract SecurityTest is Test {
         // The contract uses ReentrancyGuard, so even if there was a reentrancy vulnerability,
         // it would be protected. Let's verify the withdrawal worked correctly.
 
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(hacker, 0);
-        assertEq(deposit.isWithdrawn, true, "Deposit should be marked as withdrawn");
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
+            hacker,
+            0
+        );
+        assertEq(
+            deposit.isWithdrawn,
+            true,
+            "Deposit should be marked as withdrawn"
+        );
 
         console.log("Reentrancy protection working correctly");
     }
 
     function testHackerCannotExploitIntegerOverflow() public {
-        console.log("=== Testing: Hacker tries to exploit integer overflow ===");
+        console.log(
+            "=== Testing: Hacker tries to exploit integer overflow ==="
+        );
 
         // Hacker tries to deposit with a very large value (but not max to avoid overflow)
         uint256 largeValue = 1000000 * 10 ** 6; // 1 million USDC
@@ -245,27 +294,40 @@ contract SecurityTest is Test {
 
         // Hacker tries to deposit large value
         vm.prank(hacker);
-        timelockPiggyBank.depositUSDC(largeValue, LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositUSDC(largeValue, LOCK_3_MONTHS);
 
         // Check that deposit was created correctly
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(hacker, 0);
-        assertEq(deposit.amount, largeValue, "Deposit amount should handle large value correctly");
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
+            hacker,
+            0
+        );
+        assertEq(
+            deposit.amount,
+            largeValue,
+            "Deposit amount should handle large value correctly"
+        );
 
         // Test that the contract handles large numbers without overflow
         uint256 totalLocked = timelockPiggyBank.getTotalLockedAmount(hacker);
-        assertEq(totalLocked, largeValue, "Total locked should handle large value correctly");
+        assertEq(
+            totalLocked,
+            largeValue,
+            "Total locked should handle large value correctly"
+        );
 
         console.log("Integer overflow protection working correctly");
     }
 
     function testHackerCannotExploitTimeManipulation() public {
-        console.log("=== Testing: Hacker tries to exploit time manipulation ===");
+        console.log(
+            "=== Testing: Hacker tries to exploit time manipulation ==="
+        );
 
         // Hacker deposits USDC
         vm.prank(hacker);
         mockUSDC.approve(address(timelockPiggyBank), USDC_100);
         vm.prank(hacker);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Hacker tries to manipulate time (this won't work in tests, but let's verify)
         // The contract uses block.timestamp which is immutable once set
@@ -288,18 +350,11 @@ contract SecurityTest is Test {
     function testHackerCannotExploitZeroAddress() public {
         console.log("=== Testing: Hacker tries to exploit zero address ===");
 
-        // Hacker tries to deposit with zero beneficiary
-        vm.prank(hacker);
-        mockUSDC.approve(address(timelockPiggyBank), USDC_100);
-        vm.prank(hacker);
-        vm.expectRevert(); // Should revert because beneficiary is zero
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, address(0));
-
         // Hacker tries to forward to zero address
         vm.prank(hacker);
         mockUSDC.approve(address(timelockPiggyBank), USDC_100);
         vm.prank(hacker);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         vm.warp(block.timestamp + LOCK_3_MONTHS + 1);
 
@@ -311,19 +366,21 @@ contract SecurityTest is Test {
     }
 
     function testHackerCannotExploitInvalidLockDuration() public {
-        console.log("=== Testing: Hacker tries to exploit invalid lock duration ===");
+        console.log(
+            "=== Testing: Hacker tries to exploit invalid lock duration ==="
+        );
 
         // Hacker tries to deposit with invalid lock duration
         vm.prank(hacker);
         mockUSDC.approve(address(timelockPiggyBank), USDC_100);
         vm.prank(hacker);
         vm.expectRevert(); // Should revert because invalid lock duration
-        timelockPiggyBank.depositUSDC(USDC_100, 30 days, beneficiary);
+        timelockPiggyBank.depositUSDC(USDC_100, 30 days);
 
         // Hacker tries to deposit with zero lock duration
         vm.prank(hacker);
         vm.expectRevert(); // Should revert because zero lock duration
-        timelockPiggyBank.depositUSDC(USDC_100, 0, beneficiary);
+        timelockPiggyBank.depositUSDC(USDC_100, 0);
 
         console.log("Invalid lock duration protection working correctly");
     }
@@ -336,12 +393,12 @@ contract SecurityTest is Test {
         mockUSDC.approve(address(timelockPiggyBank), USDC_100);
         vm.prank(hacker);
         vm.expectRevert(); // Should revert because zero amount
-        timelockPiggyBank.depositUSDC(0, LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositUSDC(0, LOCK_3_MONTHS);
 
         // Hacker tries to deposit ETH with zero value
         vm.prank(hacker);
         vm.expectRevert(); // Should revert because zero value
-        timelockPiggyBank.depositETH{value: 0}(LOCK_3_MONTHS, beneficiary);
+        timelockPiggyBank.depositETH{value: 0}(LOCK_3_MONTHS);
 
         console.log("Zero amount protection working correctly");
     }

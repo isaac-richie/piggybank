@@ -1,7 +1,7 @@
 import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { useAccount } from 'wagmi';
-import { CONTRACT_ADDRESS, USDC_ADDRESS, TIMELOCK_PIGGY_BANK_ABI, USDC_ABI } from '@/lib/contracts';
-import { parseUSDC, formatUSDC, formatETH } from '@/lib/utils';
+import { CONTRACT_ADDRESS, USDC_ADDRESS, WBTC_ADDRESS, TIMELOCK_PIGGY_BANK_ABI, USDC_ABI, WBTC_ABI } from '@/lib/contracts';
+import { parseUSDC, formatUSDC, formatETH, parseWBTC, formatWBTC } from '@/lib/utils';
 
 // Hook for reading contract data
 export const useTimelockPiggyBank = () => {
@@ -31,6 +31,14 @@ export const useTimelockPiggyBank = () => {
     args: address ? [address] : undefined,
   });
 
+  // Get total locked WBTC
+  const { data: totalLockedWBTC = 0n, refetch: refetchTotalLockedWBTC } = useReadContract({
+    address: CONTRACT_ADDRESS as `0x${string}`,
+    abi: TIMELOCK_PIGGY_BANK_ABI,
+    functionName: 'getTotalLockedWBTC',
+    args: address ? [address] : undefined,
+  });
+
   // Get active deposit count
   const { data: activeDepositCount = 0n, refetch: refetchActiveDepositCount } = useReadContract({
     address: CONTRACT_ADDRESS as `0x${string}`,
@@ -51,6 +59,13 @@ export const useTimelockPiggyBank = () => {
     address: CONTRACT_ADDRESS as `0x${string}`,
     abi: TIMELOCK_PIGGY_BANK_ABI,
     functionName: 'getContractETHBalance',
+  });
+
+  // Get contract WBTC balance
+  const { data: contractWBTCBalance = 0n, refetch: refetchWBTCBalance } = useReadContract({
+    address: CONTRACT_ADDRESS as `0x${string}`,
+    abi: TIMELOCK_PIGGY_BANK_ABI,
+    functionName: 'getContractWBTCBalance',
   });
 
   // Get valid lock durations
@@ -79,8 +94,10 @@ export const useTimelockPiggyBank = () => {
     refetchActiveDepositCount();
     refetchTotalLockedUSDC();
     refetchTotalLockedETH();
+    refetchTotalLockedWBTC();
     refetchUSDCBalance();
     refetchETHBalance();
+    refetchWBTCBalance();
   };
 
   return {
@@ -88,8 +105,10 @@ export const useTimelockPiggyBank = () => {
     activeDepositCount: Number(activeDepositCount),
     totalLockedUSDC: formatUSDC(totalLockedUSDC),
     totalLockedETH: formatETH(totalLockedETH),
+    totalLockedWBTC: formatWBTC(totalLockedWBTC),
     contractUSDCBalance: formatUSDC(contractUSDCBalance),
     contractETHBalance: formatETH(contractETHBalance),
+    contractWBTCBalance: formatWBTC(contractWBTCBalance),
     lockDurations: lockDurations as bigint[],
     owner,
     isPaused,
@@ -148,6 +167,38 @@ export const useUSDC = () => {
   };
 };
 
+// Hook for WBTC operations
+export const useWBTC = () => {
+  const { address } = useAccount();
+
+  // Get WBTC balance
+  const { data: balance = 0n, refetch: refetchBalance } = useReadContract({
+    address: WBTC_ADDRESS as `0x${string}`,
+    abi: WBTC_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+  });
+
+  // Get allowance
+  const { data: allowance = 0n, refetch: refetchAllowance } = useReadContract({
+    address: WBTC_ADDRESS as `0x${string}`,
+    abi: WBTC_ABI,
+    functionName: 'allowance',
+    args: address ? [address, CONTRACT_ADDRESS as `0x${string}`] : undefined,
+  });
+
+  const refetchAll = () => {
+    refetchBalance();
+    refetchAllowance();
+  };
+
+  return {
+    balance: formatWBTC(balance),
+    allowance: formatWBTC(allowance),
+    refetchAll,
+  };
+};
+
 // Hook for contract write operations
 export const useContractWrite = () => {
   const { writeContract, data: hash, error, isPending } = useWriteContract();
@@ -156,24 +207,35 @@ export const useContractWrite = () => {
   });
 
   // Deposit USDC
-  const depositUSDC = async (amount: string, lockDuration: bigint, beneficiary: string) => {
-    console.log('Calling depositUSDC with:', { amount, lockDuration, beneficiary });
+  const depositUSDC = async (amount: string, lockDuration: bigint) => {
+    console.log('Calling depositUSDC with:', { amount, lockDuration });
     return writeContract({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: TIMELOCK_PIGGY_BANK_ABI,
       functionName: 'depositUSDC',
-      args: [parseUSDC(amount), lockDuration, beneficiary as `0x${string}`],
+      args: [parseUSDC(amount), lockDuration],
     });
   };
 
   // Deposit ETH
-  const depositETH = async (lockDuration: bigint, beneficiary: string, value: bigint) => {
+  const depositETH = async (lockDuration: bigint, value: bigint) => {
     return writeContract({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: TIMELOCK_PIGGY_BANK_ABI,
       functionName: 'depositETH',
-      args: [lockDuration, beneficiary as `0x${string}`],
+      args: [lockDuration],
       value,
+    });
+  };
+
+  // Deposit WBTC
+  const depositWBTC = async (amount: string, lockDuration: bigint) => {
+    console.log('Calling depositWBTC with:', { amount, lockDuration });
+    return writeContract({
+      address: CONTRACT_ADDRESS as `0x${string}`,
+      abi: TIMELOCK_PIGGY_BANK_ABI,
+      functionName: 'depositWBTC',
+      args: [parseWBTC(amount), lockDuration],
     });
   };
 
@@ -207,12 +269,24 @@ export const useContractWrite = () => {
     });
   };
 
+  // Approve WBTC
+  const approveWBTC = async (amount: string) => {
+    return writeContract({
+      address: WBTC_ADDRESS as `0x${string}`,
+      abi: WBTC_ABI,
+      functionName: 'approve',
+      args: [CONTRACT_ADDRESS as `0x${string}`, parseWBTC(amount)],
+    });
+  };
+
   return {
     depositUSDC,
     depositETH,
+    depositWBTC,
     withdraw,
     forwardDeposit,
     approveUSDC,
+    approveWBTC,
     hash,
     error,
     isPending,

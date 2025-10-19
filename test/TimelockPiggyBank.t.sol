@@ -5,43 +5,61 @@ import "forge-std/Test.sol";
 import "forge-std/console.sol";
 import "../src/TimelockPiggyBank.sol";
 import "../src/MockUSDC.sol";
+import "../src/MockWBTC.sol";
 
 contract TimelockPiggyBankTest is Test {
     TimelockPiggyBank public timelockPiggyBank;
     MockUSDC public mockUSDC;
+    MockWBTC public mockWBTC;
 
     address public owner;
     address public user1;
     address public user2;
 
     // Lock durations in seconds
-    uint256 public constant LOCK_3_MONTHS = 3 minutes;
-    uint256 public constant LOCK_6_MONTHS = 6 minutes;
-    uint256 public constant LOCK_9_MONTHS = 9 minutes;
-    uint256 public constant LOCK_12_MONTHS = 12 minutes;
+    uint256 public constant LOCK_3_MONTHS = 90 days;
+    uint256 public constant LOCK_6_MONTHS = 180 days;
+    uint256 public constant LOCK_9_MONTHS = 270 days;
+    uint256 public constant LOCK_12_MONTHS = 365 days;
 
     // USDC amounts (6 decimals)
     uint256 public constant USDC_100 = 100 * 10 ** 6;
     uint256 public constant USDC_1000 = 1000 * 10 ** 6;
 
     event DepositCreated(
-        address indexed user, uint256 indexed depositId, uint256 amount, uint256 lockDuration, address beneficiary
+        address indexed user,
+        uint256 indexed depositId,
+        uint256 amount,
+        uint256 lockDuration
     );
 
-    event DepositWithdrawn(address indexed user, uint256 indexed depositId, uint256 amount, address indexed to);
+    event DepositWithdrawn(
+        address indexed user,
+        uint256 indexed depositId,
+        uint256 amount,
+        address indexed to
+    );
 
-    event TokensRescued(address indexed token, uint256 amount, address indexed to);
+    event TokensRescued(
+        address indexed token,
+        uint256 amount,
+        address indexed to
+    );
 
     function setUp() public {
         owner = address(this);
         user1 = makeAddr("user1");
         user2 = makeAddr("user2");
 
-        // Deploy mock USDC
+        // Deploy mock tokens
         mockUSDC = new MockUSDC();
+        mockWBTC = new MockWBTC();
 
         // Deploy TimelockPiggyBank
-        timelockPiggyBank = new TimelockPiggyBank(address(mockUSDC));
+        timelockPiggyBank = new TimelockPiggyBank(
+            address(mockUSDC),
+            address(mockWBTC)
+        );
 
         // Mint USDC to users
         mockUSDC.mint(user1, USDC_1000);
@@ -75,16 +93,21 @@ contract TimelockPiggyBankTest is Test {
     function testValidDeposit() public {
         vm.prank(user1);
         vm.expectEmit(true, true, true, true);
-        emit DepositCreated(user1, 0, USDC_100, LOCK_3_MONTHS, user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        emit DepositCreated(user1, 0, USDC_100, LOCK_3_MONTHS);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Check deposit was created
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(user1, 0);
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
+            user1,
+            0
+        );
         assertEq(deposit.amount, USDC_100);
         assertEq(deposit.lockDuration, LOCK_3_MONTHS);
-        assertEq(deposit.beneficiary, user1);
         assertEq(deposit.isWithdrawn, false);
-        assertEq(deposit.isETH, false);
+        assertEq(
+            uint256(deposit.assetType),
+            uint256(TimelockPiggyBank.AssetType.USDC)
+        );
 
         // Check user deposit count
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 1);
@@ -96,29 +119,33 @@ contract TimelockPiggyBankTest is Test {
     function testInvalidLockDuration() public {
         vm.prank(user1);
         vm.expectRevert(TimelockPiggyBank.InvalidLockDuration.selector);
-        timelockPiggyBank.depositUSDC(USDC_100, 30 days, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, 30 days);
     }
 
     function testZeroAmount() public {
         vm.prank(user1);
         vm.expectRevert(TimelockPiggyBank.ZeroAmount.selector);
-        timelockPiggyBank.depositUSDC(0, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(0, LOCK_3_MONTHS);
     }
 
     function testZeroAddressBeneficiary() public {
+        // This test is no longer relevant since we removed beneficiary parameter
+        // Deposits now automatically use msg.sender
         vm.prank(user1);
-        vm.expectRevert(TimelockPiggyBank.ZeroAddress.selector);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, address(0));
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+
+        // Verify deposit was created
+        assertEq(timelockPiggyBank.getUserDepositCount(user1), 1);
     }
 
     function testMultipleDeposits() public {
         // First deposit
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Second deposit
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_6_MONTHS, user2);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_6_MONTHS);
 
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 2);
         assertEq(timelockPiggyBank.getTotalLockedAmount(user1), USDC_100 * 2);
@@ -126,7 +153,7 @@ contract TimelockPiggyBankTest is Test {
 
     function testWithdrawBeforeUnlock() public {
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         vm.prank(user1);
         vm.expectRevert(TimelockPiggyBank.DepositNotUnlocked.selector);
@@ -135,7 +162,7 @@ contract TimelockPiggyBankTest is Test {
 
     function testWithdrawAfterUnlock() public {
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Fast forward time by 91 days
         vm.warp(block.timestamp + 91 days);
@@ -151,13 +178,16 @@ contract TimelockPiggyBankTest is Test {
         assertEq(balanceAfter - balanceBefore, USDC_100);
 
         // Check deposit is marked as withdrawn
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(user1, 0);
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
+            user1,
+            0
+        );
         assertTrue(deposit.isWithdrawn);
     }
 
     function testDoubleWithdrawal() public {
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Fast forward time
         vm.warp(block.timestamp + 91 days);
@@ -174,7 +204,7 @@ contract TimelockPiggyBankTest is Test {
 
     function testForwardDeposit() public {
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Fast forward time
         vm.warp(block.timestamp + 91 days);
@@ -192,7 +222,7 @@ contract TimelockPiggyBankTest is Test {
 
     function testIsDepositUnlocked() public {
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Initially locked
         assertFalse(timelockPiggyBank.isDepositUnlocked(user1, 0));
@@ -241,27 +271,33 @@ contract TimelockPiggyBankTest is Test {
     function testGetAvailableWithdrawalAmount() public {
         // Make deposits with different lock durations
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_6_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_6_MONTHS);
 
         // Initially no deposits are unlocked
         assertEq(timelockPiggyBank.getAvailableWithdrawalAmount(user1), 0);
 
         // Fast forward to unlock first deposit
         vm.warp(block.timestamp + LOCK_3_MONTHS + 1);
-        assertEq(timelockPiggyBank.getAvailableWithdrawalAmount(user1), USDC_100);
+        assertEq(
+            timelockPiggyBank.getAvailableWithdrawalAmount(user1),
+            USDC_100
+        );
 
         // Fast forward to unlock second deposit
         vm.warp(block.timestamp + (LOCK_6_MONTHS - LOCK_3_MONTHS));
-        assertEq(timelockPiggyBank.getAvailableWithdrawalAmount(user1), USDC_100 * 2);
+        assertEq(
+            timelockPiggyBank.getAvailableWithdrawalAmount(user1),
+            USDC_100 * 2
+        );
     }
 
     function testDepositWithDifferentBeneficiaries() public {
         // User1 deposits with user2 as beneficiary
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user2);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Fast forward time
         vm.warp(block.timestamp + 91 days);
@@ -284,7 +320,7 @@ contract TimelockPiggyBankTest is Test {
 
     function testWrongBeneficiaryCannotWithdraw() public {
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Fast forward time
         vm.warp(block.timestamp + 91 days);
@@ -297,7 +333,7 @@ contract TimelockPiggyBankTest is Test {
 
     function testContractBalance() public {
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         assertEq(timelockPiggyBank.getContractBalance(), USDC_100);
     }
@@ -308,7 +344,7 @@ contract TimelockPiggyBankTest is Test {
         // Test each valid duration
         for (uint256 i = 0; i < durations.length; i++) {
             vm.prank(user1);
-            timelockPiggyBank.depositUSDC(USDC_100, durations[i], user1);
+            timelockPiggyBank.depositUSDC(USDC_100, durations[i]);
         }
 
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 4);
@@ -322,16 +358,21 @@ contract TimelockPiggyBankTest is Test {
 
         vm.prank(user1);
         vm.expectEmit(true, true, true, true);
-        emit DepositCreated(user1, 0, ethAmount, LOCK_3_MONTHS, user1);
-        timelockPiggyBank.depositETH{value: ethAmount}(LOCK_3_MONTHS, user1);
+        emit DepositCreated(user1, 0, ethAmount, LOCK_3_MONTHS);
+        timelockPiggyBank.depositETH{value: ethAmount}(LOCK_3_MONTHS);
 
         // Check deposit was created
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(user1, 0);
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
+            user1,
+            0
+        );
         assertEq(deposit.amount, ethAmount);
         assertEq(deposit.lockDuration, LOCK_3_MONTHS);
-        assertEq(deposit.beneficiary, user1);
         assertEq(deposit.isWithdrawn, false);
-        assertEq(deposit.isETH, true);
+        assertEq(
+            uint256(deposit.assetType),
+            uint256(TimelockPiggyBank.AssetType.ETH)
+        );
 
         // Check user deposit count
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 1);
@@ -346,26 +387,30 @@ contract TimelockPiggyBankTest is Test {
     function testETHDepositWithZeroValue() public {
         vm.prank(user1);
         vm.expectRevert(TimelockPiggyBank.ZeroAmount.selector);
-        timelockPiggyBank.depositETH{value: 0}(LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositETH{value: 0}(LOCK_3_MONTHS);
     }
 
     function testETHDepositWithZeroBeneficiary() public {
+        // This test is no longer relevant since we removed beneficiary
+        // ETH deposits now only require lockDuration
         vm.prank(user1);
-        vm.expectRevert(TimelockPiggyBank.ZeroAddress.selector);
-        timelockPiggyBank.depositETH{value: 1 ether}(LOCK_3_MONTHS, address(0));
+        timelockPiggyBank.depositETH{value: 1 ether}(LOCK_3_MONTHS);
+
+        // Verify deposit was created
+        assertEq(timelockPiggyBank.getUserDepositCount(user1), 1);
     }
 
     function testETHDepositWithInvalidLockDuration() public {
         vm.prank(user1);
         vm.expectRevert(TimelockPiggyBank.InvalidLockDuration.selector);
-        timelockPiggyBank.depositETH{value: 1 ether}(30 days, user1);
+        timelockPiggyBank.depositETH{value: 1 ether}(30 days);
     }
 
     function testETHWithdrawalAfterUnlock() public {
         uint256 ethAmount = 1 ether;
 
         vm.prank(user1);
-        timelockPiggyBank.depositETH{value: ethAmount}(LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositETH{value: ethAmount}(LOCK_3_MONTHS);
 
         // Fast forward time by 91 days
         vm.warp(block.timestamp + 91 days);
@@ -381,7 +426,10 @@ contract TimelockPiggyBankTest is Test {
         assertEq(balanceAfter - balanceBefore, ethAmount);
 
         // Check deposit is marked as withdrawn
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(user1, 0);
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
+            user1,
+            0
+        );
         assertTrue(deposit.isWithdrawn);
     }
 
@@ -389,7 +437,7 @@ contract TimelockPiggyBankTest is Test {
         uint256 ethAmount = 1 ether;
 
         vm.prank(user1);
-        timelockPiggyBank.depositETH{value: ethAmount}(LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositETH{value: ethAmount}(LOCK_3_MONTHS);
 
         // Fast forward time
         vm.warp(block.timestamp + 91 days);
@@ -408,23 +456,34 @@ contract TimelockPiggyBankTest is Test {
     function testMixedDeposits() public {
         // Deposit USDC
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Deposit ETH
         vm.prank(user1);
-        timelockPiggyBank.depositETH{value: 1 ether}(LOCK_6_MONTHS, user2);
+        timelockPiggyBank.depositETH{value: 1 ether}(LOCK_6_MONTHS);
 
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 2);
-        assertEq(timelockPiggyBank.getTotalLockedAmount(user1), USDC_100 + 1 ether);
+        assertEq(
+            timelockPiggyBank.getTotalLockedAmount(user1),
+            USDC_100 + 1 ether
+        );
 
         // Check both deposits
-        TimelockPiggyBank.Deposit memory usdcDeposit = timelockPiggyBank.getDeposit(user1, 0);
-        TimelockPiggyBank.Deposit memory ethDeposit = timelockPiggyBank.getDeposit(user1, 1);
+        TimelockPiggyBank.Deposit memory usdcDeposit = timelockPiggyBank
+            .getDeposit(user1, 0);
+        TimelockPiggyBank.Deposit memory ethDeposit = timelockPiggyBank
+            .getDeposit(user1, 1);
 
         assertEq(usdcDeposit.amount, USDC_100);
-        assertEq(usdcDeposit.isETH, false);
+        assertEq(
+            uint256(usdcDeposit.assetType),
+            uint256(TimelockPiggyBank.AssetType.USDC)
+        );
         assertEq(ethDeposit.amount, 1 ether);
-        assertEq(ethDeposit.isETH, true);
+        assertEq(
+            uint256(ethDeposit.assetType),
+            uint256(TimelockPiggyBank.AssetType.ETH)
+        );
     }
 
     function testRescueETH() public {
@@ -463,7 +522,7 @@ contract TimelockPiggyBankTest is Test {
 
         // User1 deposits ETH with user2 as beneficiary
         vm.prank(user1);
-        timelockPiggyBank.depositETH{value: ethAmount}(LOCK_3_MONTHS, user2);
+        timelockPiggyBank.depositETH{value: ethAmount}(LOCK_3_MONTHS);
 
         // Fast forward time
         vm.warp(block.timestamp + 91 days);
@@ -573,17 +632,20 @@ contract TimelockPiggyBankTest is Test {
 
         // Create some deposits
         vm.prank(user1);
-        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS, user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         vm.prank(user1);
-        timelockPiggyBank.depositETH{value: 1 ether}(LOCK_6_MONTHS, user2);
+        timelockPiggyBank.depositETH{value: 1 ether}(LOCK_6_MONTHS);
 
         // Transfer ownership
         timelockPiggyBank.transferOwnership(newOwner);
 
         // Deposits should still be accessible
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 2);
-        assertEq(timelockPiggyBank.getTotalLockedAmount(user1), USDC_100 + 1 ether);
+        assertEq(
+            timelockPiggyBank.getTotalLockedAmount(user1),
+            USDC_100 + 1 ether
+        );
 
         // New owner should be able to access admin functions
         vm.prank(newOwner);

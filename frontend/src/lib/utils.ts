@@ -21,6 +21,16 @@ export const parseETH = (amount: string) => {
   return parseUnits(amount, 18);
 };
 
+// Format WBTC amounts (8 decimals)
+export const formatWBTC = (amount: bigint) => {
+  return formatUnits(amount, 8);
+};
+
+// Parse WBTC amounts (8 decimals)
+export const parseWBTC = (amount: string) => {
+  return parseUnits(amount, 8);
+};
+
 // Format time duration
 export const formatDuration = (seconds: number) => {
   const days = Math.floor(seconds / 86400);
