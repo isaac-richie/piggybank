@@ -6,8 +6,8 @@ import { Providers } from './providers';
 const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Timelock Piggy Bank',
-  description: 'Secure time-locked savings with USDC and ETH deposits',
+  title: 'Piggylock | Build Wealth with Disciplined Crypto Savings',
+  description: 'Lock your crypto and commit to your financial goals. Deposit ETH, USDC, or WBTC for 3-12 months with smart contract security on Base.',
 };
 
 export default function RootLayout({

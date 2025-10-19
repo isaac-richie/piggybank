@@ -3,7 +3,7 @@ import { base } from 'wagmi/chains';
 import { NETWORK_CONFIG } from './contracts';
 
 export const config = getDefaultConfig({
-  appName: 'Timelock Piggy Bank',
+  appName: 'Piggylock',
   projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'your-project-id',
   chains: [
     {

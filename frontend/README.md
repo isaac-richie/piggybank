@@ -1,15 +1,17 @@
-# 🏦 Timelock Piggy Bank Frontend
+# 🐷 Piggylock Frontend
 
-A modern, responsive web application for the Timelock Piggy Bank smart contract built with Next.js, TypeScript, and Tailwind CSS.
+A modern, responsive web application for Piggylock - Build wealth with disciplined crypto savings. Built with Next.js, TypeScript, and Tailwind CSS on Base Mainnet.
 
 ## ✨ Features
 
 - 🔗 **Wallet Connection** - Connect with MetaMask, WalletConnect, and more
-- 💰 **Dual Asset Support** - Deposit USDC and ETH
+- 🪙 **Multi-Asset Support** - Deposit ETH, USDC, and WBTC
 - ⏰ **Flexible Lock Periods** - 3, 6, 9, or 12 months
+- 💎 **Self-Discipline Tool** - Prevent impulsive trading
 - 📊 **Real-time Stats** - View your deposits and contract statistics
 - 🎨 **Modern UI** - Beautiful, responsive design with Tailwind CSS
-- 🔒 **Secure** - Built with Web3 best practices
+- 📱 **Mobile Optimized** - Perfect experience on all devices
+- 🔒 **Secure** - Built with Web3 best practices on Base Mainnet
 
 ## 🚀 Getting Started
 
@@ -17,7 +19,7 @@ A modern, responsive web application for the Timelock Piggy Bank smart contract 
 
 - Node.js 18+ 
 - npm or yarn
-- Wallet with Base Sepolia ETH
+- Wallet with Base Mainnet ETH
 
 ### Installation
 

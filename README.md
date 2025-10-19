@@ -1,25 +1,40 @@
-# Timelock Piggy Bank
+# 🐷 Piggylock
 
-A secure, ready-to-deploy Solidity contract that supports depositing USDC with multiple lock durations and withdrawal capabilities. Built with Foundry for fast compilation and testing.
+**Build Wealth with Disciplined Crypto Savings**
 
-## Features
+A secure, production-ready smart contract platform for time-locked crypto savings. Lock your ETH, USDC, or WBTC for 3-12 months and commit to your financial goals. Built with Foundry and deployed on Base Mainnet.
 
-- **USDC Deposits**: Users can deposit USDC into the contract (must approve first)
-- **4 Lock Durations**: 3, 6, 9, and 12 months
-- **Multiple Deposits**: Each user can make multiple deposits, tracked by unique IDs
-- **Withdrawal**: Beneficiaries can withdraw unlocked deposits to themselves
-- **Forwarding**: Send unlocked deposits to any other address
-- **Admin Rescue**: Owner can rescue accidentally sent tokens
-- **Safety Features**: OpenZeppelin SafeERC20, ReentrancyGuard, and comprehensive checks
+## 🌟 Features
 
-## Contract Details
+- **🪙 Multi-Asset Support**: Deposit ETH, USDC, and WBTC
+- **⏰ Flexible Lock Durations**: 3, 6, 9, and 12 months
+- **💎 Self-Discipline Tool**: Prevent impulsive trading and panic selling
+- **📊 Multiple Deposits**: Each user can make unlimited deposits, tracked by unique IDs
+- **🔓 Withdrawal**: Beneficiaries can withdraw unlocked deposits
+- **➡️ Forwarding**: Send unlocked deposits to any address
+- **🛡️ Security Features**: OpenZeppelin contracts, ReentrancyGuard, Pausable
+- **👥 Whitelist Support**: Optional whitelist for controlled access
+- **🔧 Admin Controls**: Owner can pause, rescue tokens, and manage whitelist
 
-- **USDC Decimals**: 6 (1 USDC = 1,000,000 units)
-- **Lock Durations**: 
-  - 3 months: 90 days
-  - 6 months: 180 days  
-  - 9 months: 270 days
-  - 12 months: 365 days
+## 📋 Contract Details
+
+### Deployed on Base Mainnet ✅
+- **Contract**: `0xBa71207D0e8d7605FA6e001972C3c8B464Bd5F5B`
+- **USDC Token**: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
+- **WBTC Token**: `0x0555E30da8f98308EdB960aa94C0Db47230d2B9c`
+- **Network**: Base Mainnet (Chain ID: 8453)
+- **Verification**: ✅ Verified on Sourcify
+
+### Asset Decimals
+- **USDC**: 6 decimals (1 USDC = 1,000,000 units)
+- **WBTC**: 8 decimals (1 WBTC = 100,000,000 units)
+- **ETH**: 18 decimals (1 ETH = 10^18 wei)
+
+### Lock Durations
+- **3 months**: 7,776,000 seconds (90 days)
+- **6 months**: 15,552,000 seconds (180 days)  
+- **9 months**: 23,328,000 seconds (270 days)
+- **12 months**: 31,536,000 seconds (365 days)
 
 ## Prerequisites
 
