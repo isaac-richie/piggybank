@@ -18,4 +18,3 @@ contract MockWBTC is ERC20 {
         _mint(to, amount);
     }
 }
-

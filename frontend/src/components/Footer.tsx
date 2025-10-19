@@ -1,6 +1,6 @@
 'use client';
 
-import { PiggyBank, Github, Twitter, ExternalLink } from 'lucide-react';
+import { PiggyBank, Github, ExternalLink } from 'lucide-react';
 import { CONTRACT_ADDRESS } from '@/lib/contracts';
 
 export function Footer() {

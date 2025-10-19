@@ -164,20 +164,29 @@ function DepositCard({
     );
   }
 
-  const { amount, lockDuration, depositTime, isWithdrawn, isETH } = deposit;
+  const { amount, lockDuration, depositTime, isWithdrawn, assetType } = deposit;
   const unlocked = isDepositUnlocked(depositTime, lockDuration);
   const timeRemaining = getTimeRemaining(depositTime, lockDuration);
+
+  // Determine asset type
+  const isETH = Number(assetType) === 1;
+  const isWBTC = Number(assetType) === 2;
+
+  // Get asset name and colors
+  const assetName = isETH ? 'ETH' : isWBTC ? 'WBTC' : 'USDC';
+  const bgColor = isETH ? 'bg-orange-100' : isWBTC ? 'bg-purple-100' : 'bg-blue-100';
+  const textColor = isETH ? 'text-orange-600' : isWBTC ? 'text-purple-600' : 'text-blue-600';
 
   return (
     <div className="border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow">
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center space-x-3">
-          <div className={`p-2 rounded-lg ${isETH ? 'bg-orange-100' : 'bg-blue-100'}`}>
-            <DollarSign className={`h-5 w-5 ${isETH ? 'text-orange-600' : 'text-blue-600'}`} />
+          <div className={`p-2 rounded-lg ${bgColor}`}>
+            <DollarSign className={`h-5 w-5 ${textColor}`} />
           </div>
           <div>
             <h3 className="font-semibold text-gray-900">
-              {isETH ? 'ETH' : 'USDC'} Deposit #{depositId}
+              {assetName} Deposit #{depositId}
             </h3>
             <p className="text-sm text-gray-600">
               {formatDateTime(depositTime)}
@@ -208,7 +217,7 @@ function DepositCard({
       <div className="mb-4">
         <p className="text-sm text-gray-600">Amount</p>
         <p className="text-2xl font-bold text-gray-900">
-          {isETH ? formatETH(amount) : formatUSDC(amount)} {isETH ? 'ETH' : 'USDC'}
+          {isETH ? formatETH(amount) : isWBTC ? (Number(amount) / 1e8).toFixed(8) : formatUSDC(amount)} {assetName}
         </p>
       </div>
 

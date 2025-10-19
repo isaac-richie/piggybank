@@ -31,10 +31,7 @@ contract USDCTransferTest is Test {
         mockWBTC = new MockWBTC();
 
         // Deploy TimelockPiggyBank
-        timelockPiggyBank = new TimelockPiggyBank(
-            address(mockUSDC),
-            address(mockWBTC)
-        );
+        timelockPiggyBank = new TimelockPiggyBank(address(mockUSDC), address(mockWBTC));
 
         // Set up addresses
         owner = address(this);
@@ -53,9 +50,7 @@ contract USDCTransferTest is Test {
 
         // Check initial balances
         uint256 initialUserBalance = mockUSDC.balanceOf(user);
-        uint256 initialContractBalance = mockUSDC.balanceOf(
-            address(timelockPiggyBank)
-        );
+        uint256 initialContractBalance = mockUSDC.balanceOf(address(timelockPiggyBank));
 
         console.log("Initial user USDC balance:", initialUserBalance);
         console.log("Initial contract USDC balance:", initialContractBalance);
@@ -67,10 +62,7 @@ contract USDCTransferTest is Test {
         console.log("User approved contract to spend", USDC_10, "USDC");
 
         // Check allowance
-        uint256 allowance = mockUSDC.allowance(
-            user,
-            address(timelockPiggyBank)
-        );
+        uint256 allowance = mockUSDC.allowance(user, address(timelockPiggyBank));
         console.log("Allowance:", allowance);
         assertEq(allowance, USDC_10, "Allowance should be 10 USDC");
 
@@ -82,34 +74,21 @@ contract USDCTransferTest is Test {
 
         // Check final balances
         uint256 finalUserBalance = mockUSDC.balanceOf(user);
-        uint256 finalContractBalance = mockUSDC.balanceOf(
-            address(timelockPiggyBank)
-        );
+        uint256 finalContractBalance = mockUSDC.balanceOf(address(timelockPiggyBank));
 
         console.log("Final user USDC balance:", finalUserBalance);
         console.log("Final contract USDC balance:", finalContractBalance);
 
         // Verify balances
-        assertEq(
-            finalUserBalance,
-            initialUserBalance - USDC_10,
-            "User balance should decrease by 10 USDC"
-        );
-        assertEq(
-            finalContractBalance,
-            initialContractBalance + USDC_10,
-            "Contract balance should increase by 10 USDC"
-        );
+        assertEq(finalUserBalance, initialUserBalance - USDC_10, "User balance should decrease by 10 USDC");
+        assertEq(finalContractBalance, initialContractBalance + USDC_10, "Contract balance should increase by 10 USDC");
 
         // Check deposit was recorded
         uint256 depositCount = timelockPiggyBank.getUserDepositCount(user);
         assertEq(depositCount, 1, "User should have 1 deposit");
 
         // Get deposit details
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
-            user,
-            0
-        );
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(user, 0);
 
         console.log("Deposit amount:", deposit.amount);
         console.log("Deposit lock duration:", deposit.lockDuration);
@@ -117,17 +96,9 @@ contract USDCTransferTest is Test {
 
         // Verify deposit details
         assertEq(deposit.amount, USDC_10, "Deposit amount should be 10 USDC");
-        assertEq(
-            deposit.lockDuration,
-            LOCK_3_MONTHS,
-            "Lock duration should be 3 months"
-        );
+        assertEq(deposit.lockDuration, LOCK_3_MONTHS, "Lock duration should be 3 months");
         assertEq(deposit.isWithdrawn, false, "Deposit should not be withdrawn");
-        assertEq(
-            uint256(deposit.assetType),
-            uint256(TimelockPiggyBank.AssetType.USDC),
-            "Should be USDC deposit"
-        );
+        assertEq(uint256(deposit.assetType), uint256(TimelockPiggyBank.AssetType.USDC), "Should be USDC deposit");
 
         // Check total locked amount
         uint256 totalLocked = timelockPiggyBank.getTotalLockedAmount(user);
@@ -137,9 +108,7 @@ contract USDCTransferTest is Test {
     }
 
     function testUSDCTransferWithInsufficientAllowance() public {
-        console.log(
-            "=== Testing USDC Transfer with Insufficient Allowance ==="
-        );
+        console.log("=== Testing USDC Transfer with Insufficient Allowance ===");
 
         // User approves less than needed
         vm.prank(user);
@@ -169,9 +138,7 @@ contract USDCTransferTest is Test {
         vm.prank(user);
         mockUSDC.approve(address(timelockPiggyBank), USDC_10);
 
-        console.log(
-            "User has 5 USDC, approved 10 USDC, trying to deposit 10 USDC"
-        );
+        console.log("User has 5 USDC, approved 10 USDC, trying to deposit 10 USDC");
 
         // This should fail due to insufficient balance
         vm.prank(user);

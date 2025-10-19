@@ -20,9 +20,7 @@ contract DeployScript is Script {
         usdcAddresses["arbitrum"] = 0xaf88d065e77c8cC2239327C5EDb3A432268e5831; // USDC on Arbitrum
         usdcAddresses["optimism"] = 0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85; // USDC on Optimism
         usdcAddresses["base"] = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // USDC on Base
-        usdcAddresses[
-            "base-sepolia"
-        ] = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // USDC on Base Sepolia
+        usdcAddresses["base-sepolia"] = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913; // USDC on Base Sepolia
 
         // WBTC addresses
         wbtcAddresses["mainnet"] = 0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599; // WBTC on Mainnet
@@ -30,9 +28,7 @@ contract DeployScript is Script {
         wbtcAddresses["arbitrum"] = 0x2f2a2543B76A4166549F7aaB2e75Bef0aefC5B0f; // WBTC on Arbitrum
         wbtcAddresses["optimism"] = 0x68f180fcCe6836688e9084f035309E29Bf0A2095; // WBTC on Optimism
         wbtcAddresses["base"] = 0x0555E30da8f98308EdB960aa94C0Db47230d2B9c; // WBTC on Base
-        wbtcAddresses[
-            "base-sepolia"
-        ] = 0x0555E30da8f98308EdB960aa94C0Db47230d2B9c; // WBTC on Base Sepolia
+        wbtcAddresses["base-sepolia"] = 0x0555E30da8f98308EdB960aa94C0Db47230d2B9c; // WBTC on Base Sepolia
         wbtcAddresses["goerli"] = 0xC04B0d3107736C32e19F1c62b2aF67BE61d63a05; // WBTC on Goerli
         wbtcAddresses["sepolia"] = 0x29f2D40B0605204364af54EC677bD022dA425d03; // WBTC on Sepolia
     }
@@ -46,12 +42,8 @@ contract DeployScript is Script {
         address usdcAddress = usdcAddresses[network];
         if (usdcAddress == address(0)) {
             console.log("USDC address not found for network:", network);
-            console.log(
-                "Please update the script with the correct USDC address for this network."
-            );
-            console.log(
-                "For local testing, you can deploy a mock USDC token first."
-            );
+            console.log("Please update the script with the correct USDC address for this network.");
+            console.log("For local testing, you can deploy a mock USDC token first.");
             return;
         }
 
@@ -59,12 +51,8 @@ contract DeployScript is Script {
         address wbtcAddress = wbtcAddresses[network];
         if (wbtcAddress == address(0)) {
             console.log("WBTC address not found for network:", network);
-            console.log(
-                "Please update the script with the correct WBTC address for this network."
-            );
-            console.log(
-                "For local testing, you can deploy a mock WBTC token first."
-            );
+            console.log("Please update the script with the correct WBTC address for this network.");
+            console.log("For local testing, you can deploy a mock WBTC token first.");
             return;
         }
 
@@ -74,17 +62,11 @@ contract DeployScript is Script {
         // Deploy the contract
         vm.startBroadcast();
 
-        TimelockPiggyBank timelockPiggyBank = new TimelockPiggyBank(
-            usdcAddress,
-            wbtcAddress
-        );
+        TimelockPiggyBank timelockPiggyBank = new TimelockPiggyBank(usdcAddress, wbtcAddress);
 
         vm.stopBroadcast();
 
-        console.log(
-            "TimelockPiggyBank deployed to: %s",
-            address(timelockPiggyBank)
-        );
+        console.log("TimelockPiggyBank deployed to: %s", address(timelockPiggyBank));
 
         // Verify the deployment
         console.log("Verifying deployment...");
@@ -96,38 +78,22 @@ contract DeployScript is Script {
         console.logAddress(address(timelockPiggyBank.wbtcToken()));
 
         // Get valid lock durations
-        uint256[] memory lockDurations = timelockPiggyBank
-            .getValidLockDurations();
+        uint256[] memory lockDurations = timelockPiggyBank.getValidLockDurations();
         console.log("Valid lock durations:");
         for (uint256 i = 0; i < lockDurations.length; i++) {
             uint256 months = lockDurations[i] / (30 * 24 * 60 * 60);
-            console.log(
-                "  %d. %d seconds (%d months)",
-                i + 1,
-                lockDurations[i],
-                months
-            );
+            console.log("  %d. %d seconds (%d months)", i + 1, lockDurations[i], months);
         }
 
         console.log("\nDeployment completed successfully!");
         console.log("\nNext steps:");
-        console.log(
-            "1. Verify the contract on Etherscan (if on mainnet/testnet)"
-        );
-        console.log(
-            "2. Users need to approve the contract to spend their USDC"
-        );
-        console.log(
-            "3. Users can then call deposit() with their desired lock duration"
-        );
+        console.log("1. Verify the contract on Etherscan (if on mainnet/testnet)");
+        console.log("2. Users need to approve the contract to spend their USDC");
+        console.log("3. Users can then call deposit() with their desired lock duration");
         console.log("\nExample usage:");
         console.log(
-            "const contract = await ethers.getContractAt('TimelockPiggyBank', '%s');",
-            address(timelockPiggyBank)
+            "const contract = await ethers.getContractAt('TimelockPiggyBank', '%s');", address(timelockPiggyBank)
         );
-        console.log(
-            "await contract.deposit(ethers.parseUnits('100', 6), %d, userAddress);",
-            lockDurations[0]
-        );
+        console.log("await contract.deposit(ethers.parseUnits('100', 6), %d, userAddress);", lockDurations[0]);
     }
 }

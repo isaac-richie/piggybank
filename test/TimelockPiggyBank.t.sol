@@ -26,25 +26,11 @@ contract TimelockPiggyBankTest is Test {
     uint256 public constant USDC_100 = 100 * 10 ** 6;
     uint256 public constant USDC_1000 = 1000 * 10 ** 6;
 
-    event DepositCreated(
-        address indexed user,
-        uint256 indexed depositId,
-        uint256 amount,
-        uint256 lockDuration
-    );
+    event DepositCreated(address indexed user, uint256 indexed depositId, uint256 amount, uint256 lockDuration);
 
-    event DepositWithdrawn(
-        address indexed user,
-        uint256 indexed depositId,
-        uint256 amount,
-        address indexed to
-    );
+    event DepositWithdrawn(address indexed user, uint256 indexed depositId, uint256 amount, address indexed to);
 
-    event TokensRescued(
-        address indexed token,
-        uint256 amount,
-        address indexed to
-    );
+    event TokensRescued(address indexed token, uint256 amount, address indexed to);
 
     function setUp() public {
         owner = address(this);
@@ -56,10 +42,7 @@ contract TimelockPiggyBankTest is Test {
         mockWBTC = new MockWBTC();
 
         // Deploy TimelockPiggyBank
-        timelockPiggyBank = new TimelockPiggyBank(
-            address(mockUSDC),
-            address(mockWBTC)
-        );
+        timelockPiggyBank = new TimelockPiggyBank(address(mockUSDC), address(mockWBTC));
 
         // Mint USDC to users
         mockUSDC.mint(user1, USDC_1000);
@@ -97,17 +80,11 @@ contract TimelockPiggyBankTest is Test {
         timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
 
         // Check deposit was created
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
-            user1,
-            0
-        );
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(user1, 0);
         assertEq(deposit.amount, USDC_100);
         assertEq(deposit.lockDuration, LOCK_3_MONTHS);
         assertEq(deposit.isWithdrawn, false);
-        assertEq(
-            uint256(deposit.assetType),
-            uint256(TimelockPiggyBank.AssetType.USDC)
-        );
+        assertEq(uint256(deposit.assetType), uint256(TimelockPiggyBank.AssetType.USDC));
 
         // Check user deposit count
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 1);
@@ -178,10 +155,7 @@ contract TimelockPiggyBankTest is Test {
         assertEq(balanceAfter - balanceBefore, USDC_100);
 
         // Check deposit is marked as withdrawn
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
-            user1,
-            0
-        );
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(user1, 0);
         assertTrue(deposit.isWithdrawn);
     }
 
@@ -281,17 +255,11 @@ contract TimelockPiggyBankTest is Test {
 
         // Fast forward to unlock first deposit
         vm.warp(block.timestamp + LOCK_3_MONTHS + 1);
-        assertEq(
-            timelockPiggyBank.getAvailableWithdrawalAmount(user1),
-            USDC_100
-        );
+        assertEq(timelockPiggyBank.getAvailableWithdrawalAmount(user1), USDC_100);
 
         // Fast forward to unlock second deposit
         vm.warp(block.timestamp + (LOCK_6_MONTHS - LOCK_3_MONTHS));
-        assertEq(
-            timelockPiggyBank.getAvailableWithdrawalAmount(user1),
-            USDC_100 * 2
-        );
+        assertEq(timelockPiggyBank.getAvailableWithdrawalAmount(user1), USDC_100 * 2);
     }
 
     function testDepositWithDifferentBeneficiaries() public {
@@ -362,17 +330,11 @@ contract TimelockPiggyBankTest is Test {
         timelockPiggyBank.depositETH{value: ethAmount}(LOCK_3_MONTHS);
 
         // Check deposit was created
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
-            user1,
-            0
-        );
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(user1, 0);
         assertEq(deposit.amount, ethAmount);
         assertEq(deposit.lockDuration, LOCK_3_MONTHS);
         assertEq(deposit.isWithdrawn, false);
-        assertEq(
-            uint256(deposit.assetType),
-            uint256(TimelockPiggyBank.AssetType.ETH)
-        );
+        assertEq(uint256(deposit.assetType), uint256(TimelockPiggyBank.AssetType.ETH));
 
         // Check user deposit count
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 1);
@@ -426,10 +388,7 @@ contract TimelockPiggyBankTest is Test {
         assertEq(balanceAfter - balanceBefore, ethAmount);
 
         // Check deposit is marked as withdrawn
-        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(
-            user1,
-            0
-        );
+        TimelockPiggyBank.Deposit memory deposit = timelockPiggyBank.getDeposit(user1, 0);
         assertTrue(deposit.isWithdrawn);
     }
 
@@ -463,27 +422,16 @@ contract TimelockPiggyBankTest is Test {
         timelockPiggyBank.depositETH{value: 1 ether}(LOCK_6_MONTHS);
 
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 2);
-        assertEq(
-            timelockPiggyBank.getTotalLockedAmount(user1),
-            USDC_100 + 1 ether
-        );
+        assertEq(timelockPiggyBank.getTotalLockedAmount(user1), USDC_100 + 1 ether);
 
         // Check both deposits
-        TimelockPiggyBank.Deposit memory usdcDeposit = timelockPiggyBank
-            .getDeposit(user1, 0);
-        TimelockPiggyBank.Deposit memory ethDeposit = timelockPiggyBank
-            .getDeposit(user1, 1);
+        TimelockPiggyBank.Deposit memory usdcDeposit = timelockPiggyBank.getDeposit(user1, 0);
+        TimelockPiggyBank.Deposit memory ethDeposit = timelockPiggyBank.getDeposit(user1, 1);
 
         assertEq(usdcDeposit.amount, USDC_100);
-        assertEq(
-            uint256(usdcDeposit.assetType),
-            uint256(TimelockPiggyBank.AssetType.USDC)
-        );
+        assertEq(uint256(usdcDeposit.assetType), uint256(TimelockPiggyBank.AssetType.USDC));
         assertEq(ethDeposit.amount, 1 ether);
-        assertEq(
-            uint256(ethDeposit.assetType),
-            uint256(TimelockPiggyBank.AssetType.ETH)
-        );
+        assertEq(uint256(ethDeposit.assetType), uint256(TimelockPiggyBank.AssetType.ETH));
     }
 
     function testRescueETH() public {
@@ -642,10 +590,7 @@ contract TimelockPiggyBankTest is Test {
 
         // Deposits should still be accessible
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 2);
-        assertEq(
-            timelockPiggyBank.getTotalLockedAmount(user1),
-            USDC_100 + 1 ether
-        );
+        assertEq(timelockPiggyBank.getTotalLockedAmount(user1), USDC_100 + 1 ether);
 
         // New owner should be able to access admin functions
         vm.prank(newOwner);
