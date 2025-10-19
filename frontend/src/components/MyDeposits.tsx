@@ -5,6 +5,14 @@ import { useTimelockPiggyBank, useDeposit, useContractWrite } from '@/hooks/useC
 import { formatUSDC, formatETH, formatDateTime, getTimeRemaining, isDepositUnlocked } from '@/lib/utils';
 import { Clock, DollarSign, ArrowRight, CheckCircle, Lock } from 'lucide-react';
 
+type DepositData = {
+  amount: bigint;
+  lockDuration: bigint;
+  depositTime: bigint;
+  isWithdrawn: boolean;
+  assetType: number;
+};
+
 export function MyDeposits() {
   const { depositCount, refetchAll: refetchContract } = useTimelockPiggyBank();
   const { withdraw, forwardDeposit, isPending, isSuccess } = useContractWrite();
@@ -164,7 +172,22 @@ function DepositCard({
     );
   }
 
-  const { amount, lockDuration, depositTime, isWithdrawn, assetType } = deposit;
+  const depositData = deposit as unknown as DepositData;
+  
+  if (!depositData.amount || depositData.amount === 0n) {
+    return (
+      <div className="border border-gray-200 rounded-xl p-6">
+        <p className="text-gray-500">Deposit #{depositId} not found</p>
+      </div>
+    );
+  }
+
+  const amount = depositData.amount;
+  const lockDuration = depositData.lockDuration;
+  const depositTime = depositData.depositTime;
+  const isWithdrawn = depositData.isWithdrawn;
+  const assetType = depositData.assetType;
+
   const unlocked = isDepositUnlocked(depositTime, lockDuration);
   const timeRemaining = getTimeRemaining(depositTime, lockDuration);
 
