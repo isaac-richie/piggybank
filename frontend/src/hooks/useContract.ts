@@ -15,11 +15,27 @@ export const useTimelockPiggyBank = () => {
     args: address ? [address] : undefined,
   });
 
-  // Get total locked amount
-  const { data: totalLocked = 0n, refetch: refetchTotalLocked } = useReadContract({
+  // Get total locked USDC
+  const { data: totalLockedUSDC = 0n, refetch: refetchTotalLockedUSDC } = useReadContract({
     address: CONTRACT_ADDRESS as `0x${string}`,
     abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getTotalLockedAmount',
+    functionName: 'getTotalLockedUSDC',
+    args: address ? [address] : undefined,
+  });
+
+  // Get total locked ETH
+  const { data: totalLockedETH = 0n, refetch: refetchTotalLockedETH } = useReadContract({
+    address: CONTRACT_ADDRESS as `0x${string}`,
+    abi: TIMELOCK_PIGGY_BANK_ABI,
+    functionName: 'getTotalLockedETH',
+    args: address ? [address] : undefined,
+  });
+
+  // Get active deposit count
+  const { data: activeDepositCount = 0n, refetch: refetchActiveDepositCount } = useReadContract({
+    address: CONTRACT_ADDRESS as `0x${string}`,
+    abi: TIMELOCK_PIGGY_BANK_ABI,
+    functionName: 'getActiveDepositCount',
     args: address ? [address] : undefined,
   });
 
@@ -60,15 +76,18 @@ export const useTimelockPiggyBank = () => {
 
   const refetchAll = () => {
     refetchDepositCount();
-    refetchTotalLocked();
+    refetchActiveDepositCount();
+    refetchTotalLockedUSDC();
+    refetchTotalLockedETH();
     refetchUSDCBalance();
     refetchETHBalance();
   };
 
   return {
     depositCount: Number(depositCount),
-    totalLockedUSDC: formatUSDC(totalLocked),
-    totalLockedETH: "0", // This will be calculated separately for ETH deposits
+    activeDepositCount: Number(activeDepositCount),
+    totalLockedUSDC: formatUSDC(totalLockedUSDC),
+    totalLockedETH: formatETH(totalLockedETH),
     contractUSDCBalance: formatUSDC(contractUSDCBalance),
     contractETHBalance: formatETH(contractETHBalance),
     lockDurations: lockDurations as bigint[],

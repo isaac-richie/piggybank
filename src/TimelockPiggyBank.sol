@@ -323,14 +323,17 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     /**
      * @dev Get the total amount locked for a user
      * @param user Address of the user
-     * @return Total amount locked (including withdrawn deposits)
+     * @return Total amount locked (excluding withdrawn deposits)
      */
     function getTotalLockedAmount(address user) external view returns (uint256) {
         uint256 total = 0;
         uint256 count = userDepositCount[user];
 
         for (uint256 i = 0; i < count; i++) {
-            total += userDeposits[user][i].amount;
+            Deposit memory depositInfo = userDeposits[user][i];
+            if (!depositInfo.isWithdrawn) {
+                total += depositInfo.amount;
+            }
         }
 
         return total;
@@ -356,5 +359,61 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         }
 
         return total;
+    }
+
+    /**
+     * @dev Get the total USDC locked for a user (excluding withdrawn deposits)
+     * @param user Address of the user
+     * @return Total USDC amount locked
+     */
+    function getTotalLockedUSDC(address user) external view returns (uint256) {
+        uint256 total = 0;
+        uint256 count = userDepositCount[user];
+
+        for (uint256 i = 0; i < count; i++) {
+            Deposit memory depositInfo = userDeposits[user][i];
+            if (!depositInfo.isWithdrawn && !depositInfo.isETH) {
+                total += depositInfo.amount;
+            }
+        }
+
+        return total;
+    }
+
+    /**
+     * @dev Get the total ETH locked for a user (excluding withdrawn deposits)
+     * @param user Address of the user
+     * @return Total ETH amount locked
+     */
+    function getTotalLockedETH(address user) external view returns (uint256) {
+        uint256 total = 0;
+        uint256 count = userDepositCount[user];
+
+        for (uint256 i = 0; i < count; i++) {
+            Deposit memory depositInfo = userDeposits[user][i];
+            if (!depositInfo.isWithdrawn && depositInfo.isETH) {
+                total += depositInfo.amount;
+            }
+        }
+
+        return total;
+    }
+
+    /**
+     * @dev Get the active deposit count (excluding withdrawn deposits)
+     * @param user Address of the user
+     * @return Number of active deposits
+     */
+    function getActiveDepositCount(address user) external view returns (uint256) {
+        uint256 activeCount = 0;
+        uint256 count = userDepositCount[user];
+
+        for (uint256 i = 0; i < count; i++) {
+            if (!userDeposits[user][i].isWithdrawn) {
+                activeCount++;
+            }
+        }
+
+        return activeCount;
     }
 }
