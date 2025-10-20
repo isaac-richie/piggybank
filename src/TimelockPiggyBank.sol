@@ -15,11 +15,11 @@ import "openzeppelin-contracts/contracts/utils/Pausable.sol";
 contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     using SafeERC20 for IERC20;
 
-    // Lock duration options in seconds
-    uint256 public constant LOCK_3_MONTHS = 90 days;
-    uint256 public constant LOCK_6_MONTHS = 180 days;
-    uint256 public constant LOCK_9_MONTHS = 270 days;
-    uint256 public constant LOCK_12_MONTHS = 365 days;
+    // Lock duration options in seconds (converted from minutes)
+    uint256 public constant LOCK_3_MONTHS = 3 minutes; // 3 minutes
+    uint256 public constant LOCK_6_MONTHS = 6 minutes; // 6 minutes
+    uint256 public constant LOCK_9_MONTHS = 9 minutes; // 9 minutes
+    uint256 public constant LOCK_12_MONTHS = 12 minutes; // 12 minutes
 
     // Token contracts
     IERC20 public immutable usdcToken;
@@ -51,6 +51,8 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
 
     // Events
     event DepositCreated(address indexed user, uint256 indexed depositId, uint256 amount, uint256 lockDuration);
+
+    event DepositToppedUp(address indexed user, uint256 indexed depositId, uint256 amount, uint256 newTotal);
 
     event DepositWithdrawn(address indexed user, uint256 indexed depositId, uint256 amount, address indexed to);
 
@@ -172,6 +174,68 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         userDepositCount[msg.sender]++;
 
         emit DepositCreated(msg.sender, depositId, amount, lockDuration);
+    }
+
+    /**
+     * @dev Top up an existing USDC deposit
+     * @param depositId ID of the deposit to top up
+     * @param amount Amount of USDC to add
+     */
+    function topUpUSDC(uint256 depositId, uint256 amount) external nonReentrant whenNotPaused onlyWhitelisted {
+        if (amount == 0) revert ZeroAmount();
+
+        Deposit storage depositInfo = userDeposits[msg.sender][depositId];
+        if (depositInfo.amount == 0) revert DepositNotFound();
+        if (depositInfo.isWithdrawn) revert DepositAlreadyWithdrawn();
+        if (depositInfo.assetType != AssetType.USDC) revert InvalidDepositId();
+
+        // Transfer USDC from user to contract
+        usdcToken.safeTransferFrom(msg.sender, address(this), amount);
+
+        // Update deposit amount
+        depositInfo.amount += amount;
+
+        emit DepositToppedUp(msg.sender, depositId, amount, depositInfo.amount);
+    }
+
+    /**
+     * @dev Top up an existing ETH deposit
+     * @param depositId ID of the deposit to top up
+     */
+    function topUpETH(uint256 depositId) external payable nonReentrant whenNotPaused onlyWhitelisted {
+        if (msg.value == 0) revert ZeroAmount();
+
+        Deposit storage depositInfo = userDeposits[msg.sender][depositId];
+        if (depositInfo.amount == 0) revert DepositNotFound();
+        if (depositInfo.isWithdrawn) revert DepositAlreadyWithdrawn();
+        if (depositInfo.assetType != AssetType.ETH) revert InvalidDepositId();
+
+        // Update deposit amount
+        depositInfo.amount += msg.value;
+
+        emit DepositToppedUp(msg.sender, depositId, msg.value, depositInfo.amount);
+    }
+
+    /**
+     * @dev Top up an existing WBTC deposit
+     * @param depositId ID of the deposit to top up
+     * @param amount Amount of WBTC to add (in 8 decimals)
+     */
+    function topUpWBTC(uint256 depositId, uint256 amount) external nonReentrant whenNotPaused onlyWhitelisted {
+        if (amount == 0) revert ZeroAmount();
+
+        Deposit storage depositInfo = userDeposits[msg.sender][depositId];
+        if (depositInfo.amount == 0) revert DepositNotFound();
+        if (depositInfo.isWithdrawn) revert DepositAlreadyWithdrawn();
+        if (depositInfo.assetType != AssetType.WBTC) revert InvalidDepositId();
+
+        // Transfer WBTC from user to contract
+        wbtcToken.safeTransferFrom(msg.sender, address(this), amount);
+
+        // Update deposit amount
+        depositInfo.amount += amount;
+
+        emit DepositToppedUp(msg.sender, depositId, amount, depositInfo.amount);
     }
 
     /**

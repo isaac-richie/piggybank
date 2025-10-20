@@ -1,5 +1,12 @@
+import { clsx, type ClassValue } from "clsx"
+import { twMerge } from "tailwind-merge"
 import { formatUnits, parseUnits } from 'viem';
 import { LOCK_DURATIONS } from './contracts';
+
+// shadcn/ui utility for merging Tailwind classes
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
+}
 
 // Format USDC amounts (6 decimals)
 export const formatUSDC = (amount: bigint) => {

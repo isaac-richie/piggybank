@@ -1,30 +1,34 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useAccount } from 'wagmi';
-import { useContractWrite, useUSDC, useWBTC } from '@/hooks/useContract';
+import { useTimelockPiggyBank, useUSDC, useWBTC, useContractWrite } from '@/hooks/useContract';
 import { LOCK_DURATIONS, type LockDuration } from '@/lib/contracts';
-import { parseUSDC, parseETH, parseWBTC } from '@/lib/utils';
-import { DollarSign, Coins, Clock } from 'lucide-react';
+import { Coins, Clock, TrendingUp, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 
 export function DepositForm() {
-  const { address } = useAccount();
-  const { balance: usdcBalance, allowance: usdcAllowance, refetchAll: refetchUSDC } = useUSDC();
-  const { balance: wbtcBalance, allowance: wbtcAllowance, refetchAll: refetchWBTC } = useWBTC();
-  const { 
-    depositUSDC, 
-    depositETH, 
+  const { refetchAll: refetchContract } = useTimelockPiggyBank();
+  const { balance: usdcBalance, refetchAll: refetchUSDC } = useUSDC();
+  const { balance: wbtcBalance, refetchAll: refetchWBTC } = useWBTC();
+  const {
+    depositUSDC,
+    depositETH,
     depositWBTC,
-    approveUSDC, 
+    approveUSDC,
     approveWBTC,
-    isPending, 
-    isConfirming,
-    isSuccess 
+    isPending,
+    isSuccess,
   } = useContractWrite();
 
   const [depositType, setDepositType] = useState<'USDC' | 'ETH' | 'WBTC'>('USDC');
   const [amount, setAmount] = useState('');
-  const [lockDuration, setLockDuration] = useState<LockDuration>('3 months');
+  const [lockDuration, setLockDuration] = useState<LockDuration>('3 mins');
   const [isApproving, setIsApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -32,23 +36,18 @@ export function DepositForm() {
   // Show success message only after transaction is confirmed
   useEffect(() => {
     if (isSuccess) {
-      setSuccess(`${depositType} deposit successful! Transaction confirmed.`);
-      // Refetch balances and allowances
+      setSuccess('Deposit successful! Your funds are now locked.');
+      setAmount('');
+      refetchContract();
       refetchUSDC();
       refetchWBTC();
-      // Reset form
-      setAmount('');
-      // Clear success message after 5 seconds
-      const timer = setTimeout(() => setSuccess(null), 5000);
-      return () => clearTimeout(timer);
+      setTimeout(() => setSuccess(null), 5000);
     }
-  }, [isSuccess, depositType, refetchUSDC, refetchWBTC]);
+  }, [isSuccess, refetchContract, refetchUSDC, refetchWBTC]);
 
-  const handleDeposit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (!amount || !address) {
-      setError('Please fill in all fields');
+  const handleDeposit = async () => {
+    if (!amount || parseFloat(amount) <= 0) {
+      setError('Please enter a valid amount');
       return;
     }
 
@@ -56,196 +55,159 @@ export function DepositForm() {
     setSuccess(null);
 
     try {
-      const duration = LOCK_DURATIONS[lockDuration];
-      
+      const lockDurationSeconds = BigInt(LOCK_DURATIONS[lockDuration]);
+
       if (depositType === 'USDC') {
-        const amountBigInt = parseUSDC(amount);
-        const allowanceBigInt = parseUSDC(usdcAllowance);
-        
-        console.log('USDC Deposit:', { amount, amountBigInt, allowanceBigInt, duration });
-        
-        if (amountBigInt > allowanceBigInt) {
-          console.log('Approving USDC...');
-          setIsApproving(true);
-          await approveUSDC(amount);
-          setIsApproving(false);
-          console.log('USDC approved, now depositing...');
-        }
-        
-        await depositUSDC(amount, BigInt(duration));
-        // Success will be shown by useEffect when isSuccess becomes true
+        setIsApproving(true);
+        await approveUSDC(amount);
+        setIsApproving(false);
+        await depositUSDC(amount, lockDurationSeconds);
+      } else if (depositType === 'ETH') {
+        const value = BigInt(Math.floor(parseFloat(amount) * 1e18));
+        await depositETH(lockDurationSeconds, value);
       } else if (depositType === 'WBTC') {
-        const amountBigInt = parseWBTC(amount);
-        const allowanceBigInt = parseWBTC(wbtcAllowance);
-        
-        console.log('WBTC Deposit:', { amount, amountBigInt, allowanceBigInt, duration });
-        
-        if (amountBigInt > allowanceBigInt) {
-          console.log('Approving WBTC...');
-          setIsApproving(true);
-          await approveWBTC(amount);
-          setIsApproving(false);
-          console.log('WBTC approved, now depositing...');
-        }
-        
-        await depositWBTC(amount, BigInt(duration));
-        // Success will be shown by useEffect when isSuccess becomes true
-      } else {
-        const amountBigInt = parseETH(amount);
-        console.log('ETH Deposit:', { amount, amountBigInt, duration });
-        await depositETH(BigInt(duration), amountBigInt);
-        // Success will be shown by useEffect when isSuccess becomes true
+        setIsApproving(true);
+        await approveWBTC(amount);
+        setIsApproving(false);
+        await depositWBTC(amount, lockDurationSeconds);
       }
-    } catch (error) {
-      console.error('Deposit failed:', error);
-      setError(`Deposit failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } catch (err) {
+      setIsApproving(false);
+      console.error('Deposit failed:', err);
+      setError(err instanceof Error ? err.message : 'Deposit failed. Please try again.');
     }
   };
 
-  const needsApproval = 
-    (depositType === 'USDC' && amount && parseUSDC(amount) > parseUSDC(usdcAllowance)) ||
-    (depositType === 'WBTC' && amount && parseWBTC(amount) > parseWBTC(wbtcAllowance));
+  const assetInfo = {
+    USDC: { icon: <Coins className="h-5 w-5" />, balance: usdcBalance, color: 'blue', decimals: 6 },
+    ETH: { icon: <TrendingUp className="h-5 w-5" />, balance: 'N/A', color: 'orange', decimals: 18 },
+    WBTC: { icon: <Coins className="h-5 w-5" />, balance: wbtcBalance, color: 'purple', decimals: 8 },
+  };
+
+  const currentAsset = assetInfo[depositType];
 
   return (
-    <div className="bg-white rounded-2xl shadow-xl p-4 sm:p-6 md:p-8">
-      <div className="flex items-center space-x-3 mb-4 md:mb-6">
-        <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-2 rounded-xl">
-          <DollarSign className="h-5 w-5 md:h-6 md:w-6 text-white" />
-        </div>
-        <h2 className="text-xl md:text-2xl font-bold text-gray-900">Make a Deposit</h2>
-      </div>
-
-      <form onSubmit={handleDeposit} className="space-y-4 md:space-y-6">
-        {/* Deposit Type */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2 md:mb-3">
-            Deposit Type
-          </label>
-          <div className="grid grid-cols-3 gap-2 md:gap-3">
-            <button
-              type="button"
-              onClick={() => setDepositType('USDC')}
-              className={`p-2 sm:p-3 md:p-4 rounded-xl border-2 transition-all ${
-                depositType === 'USDC'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
-                <Coins className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="font-medium text-xs sm:text-sm md:text-base">USDC</span>
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setDepositType('WBTC')}
-              className={`p-2 sm:p-3 md:p-4 rounded-xl border-2 transition-all ${
-                depositType === 'WBTC'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
-                <Coins className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="font-medium text-xs sm:text-sm md:text-base">WBTC</span>
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setDepositType('ETH')}
-              className={`p-2 sm:p-3 md:p-4 rounded-xl border-2 transition-all ${
-                depositType === 'ETH'
-                  ? 'border-blue-500 bg-blue-50 text-blue-700'
-                  : 'border-gray-200 hover:border-gray-300'
-              }`}
-            >
-              <div className="flex flex-col sm:flex-row items-center justify-center gap-1 sm:gap-2">
-                <Coins className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="font-medium text-xs sm:text-sm md:text-base">ETH</span>
-              </div>
-            </button>
+    <Card className="shadow-2xl border-0 bg-gradient-to-br from-white to-gray-50">
+      <CardHeader className="space-y-1 pb-4">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+            Create Deposit
+          </CardTitle>
+          <div className="flex items-center gap-2 text-sm text-gray-600">
+            <Clock className="h-4 w-4" />
+            <span className="font-medium">{lockDuration}</span>
           </div>
         </div>
+        <CardDescription>
+          Lock your crypto and commit to your savings goals
+        </CardDescription>
+      </CardHeader>
 
-        {/* Amount */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Amount ({depositType})
-          </label>
-          <div className="space-y-2">
-            <input
+      <CardContent className="space-y-6">
+        {/* Asset Selection Tabs */}
+        <Tabs value={depositType} onValueChange={(v) => setDepositType(v as typeof depositType)}>
+          <TabsList className="grid w-full grid-cols-3">
+            <TabsTrigger value="USDC" className="gap-2">
+              <Coins className="h-4 w-4" />
+              USDC
+            </TabsTrigger>
+            <TabsTrigger value="ETH" className="gap-2">
+              <TrendingUp className="h-4 w-4" />
+              ETH
+            </TabsTrigger>
+            <TabsTrigger value="WBTC" className="gap-2">
+              <Coins className="h-4 w-4" />
+              WBTC
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
+
+        {/* Amount Input */}
+        <div className="space-y-2">
+          <Label htmlFor="amount" className="text-sm font-medium">
+            Amount
+          </Label>
+          <div className="relative">
+            <Input
+              id="amount"
               type="number"
-              step="0.000001"
+              placeholder="0.00"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              placeholder={`Enter ${depositType} amount`}
-              className="w-full px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              required
+              step={depositType === 'ETH' ? '0.01' : depositType === 'WBTC' ? '0.00000001' : '0.01'}
+              className="text-lg h-12 pr-20"
             />
-            <div className="text-right text-sm text-gray-500">
-              Balance: {depositType === 'USDC' ? usdcBalance : depositType === 'WBTC' ? wbtcBalance : 'ETH'}
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
+              <Badge variant="secondary" className="font-medium">
+                {depositType}
+              </Badge>
             </div>
           </div>
+          {currentAsset.balance !== 'N/A' && (
+            <p className="text-xs text-gray-500">
+              Balance: <span className="font-medium">{currentAsset.balance} {depositType}</span>
+            </p>
+          )}
         </div>
 
-        {/* Lock Duration */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-3">
-            Lock Duration
-          </label>
-          <div className="grid grid-cols-2 gap-3">
-            {Object.keys(LOCK_DURATIONS).map((duration) => (
-              <button
+        {/* Lock Duration Selection */}
+        <div className="space-y-2">
+          <Label className="text-sm font-medium">Lock Duration</Label>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            {(Object.keys(LOCK_DURATIONS) as LockDuration[]).map((duration) => (
+              <Button
                 key={duration}
-                type="button"
-                onClick={() => setLockDuration(duration as LockDuration)}
-                className={`p-3 rounded-xl border-2 transition-all ${
-                  lockDuration === duration
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-gray-200 hover:border-gray-300'
-                }`}
+                variant={lockDuration === duration ? 'default' : 'outline'}
+                onClick={() => setLockDuration(duration)}
+                className={lockDuration === duration ? 'bg-gradient-to-r from-indigo-600 to-purple-600' : ''}
               >
-                <div className="flex items-center space-x-2">
-                  <Clock className="h-4 w-4" />
-                  <span className="font-medium">{duration}</span>
-                </div>
-              </button>
+                {duration}
+              </Button>
             ))}
           </div>
         </div>
 
-        {/* Error/Success Messages */}
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl">
-            {error}
-          </div>
-        )}
-        
+        {/* Messages */}
         {success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-xl">
-            {success}
-          </div>
+          <Alert className="bg-green-50 border-green-200">
+            <CheckCircle2 className="h-4 w-4 text-green-600" />
+            <AlertDescription className="text-green-800">{success}</AlertDescription>
+          </Alert>
         )}
 
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={isPending || isConfirming || isApproving}
-          className="w-full bg-gradient-to-r from-blue-600 to-purple-600 text-white py-3 px-6 rounded-xl font-medium hover:from-blue-700 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+        {error && (
+          <Alert className="bg-red-50 border-red-200">
+            <AlertCircle className="h-4 w-4 text-red-600" />
+            <AlertDescription className="text-red-800">{error}</AlertDescription>
+          </Alert>
+        )}
+
+        {/* Deposit Button */}
+        <Button
+          onClick={handleDeposit}
+          disabled={isPending || isApproving || !amount}
+          className="w-full h-12 text-base font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all"
         >
           {isApproving ? (
-            'Approving...'
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Approving {depositType}...
+            </>
           ) : isPending ? (
-            'Confirming...'
-          ) : isConfirming ? (
-            'Processing...'
-          ) : needsApproval ? (
-            'Approve & Deposit'
+            <>
+              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+              Processing...
+            </>
           ) : (
-            `Deposit ${depositType}`
+            `Lock ${amount || '0'} ${depositType}`
           )}
-        </button>
-      </form>
-    </div>
+        </Button>
+
+        {/* Info Note */}
+        <div className="text-xs text-center text-gray-500 bg-gray-100 rounded-lg p-3">
+          💡 Funds will be locked for the selected duration. You can top up anytime!
+        </div>
+      </CardContent>
+    </Card>
   );
 }

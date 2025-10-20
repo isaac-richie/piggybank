@@ -1,23 +1,39 @@
 // Contract configuration and ABI
 import TimelockABI from "./TimelockPiggyBank.abi.json";
 
-export const CONTRACT_ADDRESS = "0xBa71207D0e8d7605FA6e001972C3c8B464Bd5F5B";
-export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
-export const WBTC_ADDRESS = "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c";
+// ============================================
+// BASE SEPOLIA (TESTNET) - ACTIVE
+// ============================================
+export const CONTRACT_ADDRESS = "0xBa71207D0e8d7605FA6e001972C3c8B464Bd5F5B"; // Deployed on Base Sepolia
+export const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"; // Base Sepolia USDC
+export const WBTC_ADDRESS = "0xaa75cE9Ea5448d29e126039F142CB24c6312D5Ed"; // Base Sepolia WBTC
 
 export const NETWORK_CONFIG = {
-  chainId: 8453, // Base Mainnet
-  name: "Base",
-  rpcUrl: "https://mainnet.base.org",
-  blockExplorer: "https://basescan.org",
+  chainId: 84532, // Base Sepolia
+  name: "Base Sepolia",
+  rpcUrl: "https://sepolia.base.org",
+  blockExplorer: "https://sepolia.basescan.org",
 };
 
-// Lock durations in seconds
+// ============================================
+// BASE MAINNET - FOR FUTURE PRODUCTION
+// ============================================
+// export const CONTRACT_ADDRESS = "0xBa71207D0e8d7605FA6e001972C3c8B464Bd5F5B";
+// export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"; // Base Mainnet USDC
+// export const WBTC_ADDRESS = "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c"; // Base Mainnet WBTC
+// export const NETWORK_CONFIG = {
+//   chainId: 8453, // Base Mainnet
+//   name: "Base",
+//   rpcUrl: "https://mainnet.base.org",
+//   blockExplorer: "https://basescan.org",
+// };
+
+// Lock durations in seconds (converted from minutes)
 export const LOCK_DURATIONS = {
-  "3 months": 7776000,   // 90 days
-  "6 months": 15552000,  // 180 days
-  "9 months": 23328000,  // 270 days
-  "12 months": 31536000, // 365 days
+  "3 mins": 3 * 60,   // 3 minutes
+  "6 mins": 6 * 60,   // 6 minutes
+  "9 mins": 9 * 60,    // 9 minutes
+  "12 mins": 12 * 60,  // 12 minutes
 } as const;
 
 export type LockDuration = keyof typeof LOCK_DURATIONS;

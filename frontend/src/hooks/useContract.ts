@@ -13,6 +13,9 @@ export const useTimelockPiggyBank = () => {
     abi: TIMELOCK_PIGGY_BANK_ABI,
     functionName: 'getUserDepositCount',
     args: address ? [address] : undefined,
+    query: {
+      refetchInterval: 5000, // Auto-refetch every 5 seconds
+    },
   });
 
   // Get total locked USDC
@@ -21,6 +24,9 @@ export const useTimelockPiggyBank = () => {
     abi: TIMELOCK_PIGGY_BANK_ABI,
     functionName: 'getTotalLockedUSDC',
     args: address ? [address] : undefined,
+    query: {
+      refetchInterval: 5000, // Auto-refetch every 5 seconds
+    },
   });
 
   // Get total locked ETH
@@ -29,6 +35,9 @@ export const useTimelockPiggyBank = () => {
     abi: TIMELOCK_PIGGY_BANK_ABI,
     functionName: 'getTotalLockedETH',
     args: address ? [address] : undefined,
+    query: {
+      refetchInterval: 5000, // Auto-refetch every 5 seconds
+    },
   });
 
   // Get total locked WBTC
@@ -37,6 +46,9 @@ export const useTimelockPiggyBank = () => {
     abi: TIMELOCK_PIGGY_BANK_ABI,
     functionName: 'getTotalLockedWBTC',
     args: address ? [address] : undefined,
+    query: {
+      refetchInterval: 5000, // Auto-refetch every 5 seconds
+    },
   });
 
   // Get active deposit count
@@ -45,6 +57,9 @@ export const useTimelockPiggyBank = () => {
     abi: TIMELOCK_PIGGY_BANK_ABI,
     functionName: 'getActiveDepositCount',
     args: address ? [address] : undefined,
+    query: {
+      refetchInterval: 5000, // Auto-refetch every 5 seconds
+    },
   });
 
   // Get contract USDC balance
@@ -125,6 +140,9 @@ export const useDeposit = (depositId: number) => {
     abi: TIMELOCK_PIGGY_BANK_ABI,
     functionName: 'getDeposit',
     args: address ? [address, BigInt(depositId)] : undefined,
+    query: {
+      refetchInterval: 3000, // Auto-refetch every 3 seconds for individual deposits
+    },
   });
 
   return {
@@ -145,6 +163,9 @@ export const useUSDC = () => {
     abi: USDC_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
+    query: {
+      refetchInterval: 5000, // Auto-refetch every 5 seconds
+    },
   });
 
   // Get allowance
@@ -153,6 +174,9 @@ export const useUSDC = () => {
     abi: USDC_ABI,
     functionName: 'allowance',
     args: address ? [address, CONTRACT_ADDRESS as `0x${string}`] : undefined,
+    query: {
+      refetchInterval: 5000, // Auto-refetch every 5 seconds
+    },
   });
 
   const refetchAll = () => {
@@ -177,6 +201,9 @@ export const useWBTC = () => {
     abi: WBTC_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,
+    query: {
+      refetchInterval: 5000, // Auto-refetch every 5 seconds
+    },
   });
 
   // Get allowance
@@ -185,6 +212,9 @@ export const useWBTC = () => {
     abi: WBTC_ABI,
     functionName: 'allowance',
     args: address ? [address, CONTRACT_ADDRESS as `0x${string}`] : undefined,
+    query: {
+      refetchInterval: 5000, // Auto-refetch every 5 seconds
+    },
   });
 
   const refetchAll = () => {
@@ -239,6 +269,40 @@ export const useContractWrite = () => {
     });
   };
 
+  // Top up USDC deposit
+  const topUpUSDC = async (depositId: number, amount: string) => {
+    console.log('Calling topUpUSDC with:', { depositId, amount });
+    return writeContract({
+      address: CONTRACT_ADDRESS as `0x${string}`,
+      abi: TIMELOCK_PIGGY_BANK_ABI,
+      functionName: 'topUpUSDC',
+      args: [BigInt(depositId), parseUSDC(amount)],
+    });
+  };
+
+  // Top up ETH deposit
+  const topUpETH = async (depositId: number, value: bigint) => {
+    console.log('Calling topUpETH with:', { depositId, value });
+    return writeContract({
+      address: CONTRACT_ADDRESS as `0x${string}`,
+      abi: TIMELOCK_PIGGY_BANK_ABI,
+      functionName: 'topUpETH',
+      args: [BigInt(depositId)],
+      value,
+    });
+  };
+
+  // Top up WBTC deposit
+  const topUpWBTC = async (depositId: number, amount: string) => {
+    console.log('Calling topUpWBTC with:', { depositId, amount });
+    return writeContract({
+      address: CONTRACT_ADDRESS as `0x${string}`,
+      abi: TIMELOCK_PIGGY_BANK_ABI,
+      functionName: 'topUpWBTC',
+      args: [BigInt(depositId), parseWBTC(amount)],
+    });
+  };
+
   // Withdraw deposit
   const withdraw = async (depositId: number) => {
     return writeContract({
@@ -283,6 +347,9 @@ export const useContractWrite = () => {
     depositUSDC,
     depositETH,
     depositWBTC,
+    topUpUSDC,
+    topUpETH,
+    topUpWBTC,
     withdraw,
     forwardDeposit,
     approveUSDC,

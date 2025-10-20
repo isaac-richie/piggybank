@@ -1,86 +1,72 @@
 'use client';
 
 import { useTimelockPiggyBank } from '@/hooks/useContract';
-import { DollarSign, PiggyBank, TrendingUp, Coins } from 'lucide-react';
+import { Wallet, TrendingUp, Package, Activity } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 
 export function Stats() {
-  const { 
-    depositCount,
-    activeDepositCount, 
+  const {
+    activeDepositCount,
     totalLockedUSDC,
     totalLockedETH,
     totalLockedWBTC,
-    contractUSDCBalance, 
-    contractETHBalance,
-    contractWBTCBalance
   } = useTimelockPiggyBank();
 
-  console.log('Stats data:', { depositCount, activeDepositCount, totalLockedUSDC, totalLockedETH, totalLockedWBTC, contractUSDCBalance, contractETHBalance, contractWBTCBalance });
+  const stats = [
+    {
+      label: 'Active Deposits',
+      value: activeDepositCount,
+      icon: <Package className="h-5 w-5" />,
+      gradient: 'from-blue-500 to-cyan-500',
+      bgGradient: 'from-blue-50 to-cyan-50',
+    },
+    {
+      label: 'Locked USDC',
+      value: `${totalLockedUSDC}`,
+      icon: <Wallet className="h-5 w-5" />,
+      gradient: 'from-green-500 to-emerald-500',
+      bgGradient: 'from-green-50 to-emerald-50',
+    },
+    {
+      label: 'Locked ETH',
+      value: `${parseFloat(totalLockedETH).toFixed(4)}`,
+      icon: <TrendingUp className="h-5 w-5" />,
+      gradient: 'from-orange-500 to-red-500',
+      bgGradient: 'from-orange-50 to-red-50',
+    },
+    {
+      label: 'Locked WBTC',
+      value: `${parseFloat(totalLockedWBTC).toFixed(6)}`,
+      icon: <Activity className="h-5 w-5" />,
+      gradient: 'from-purple-500 to-pink-500',
+      bgGradient: 'from-purple-50 to-pink-50',
+    },
+  ];
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-      {/* Active Deposits */}
-      <div className="bg-gradient-to-br from-blue-50 to-white rounded-xl p-4 border border-blue-100">
-        <div className="flex items-center gap-2 mb-2">
-          <PiggyBank className="h-4 w-4 text-blue-600" />
-          <p className="text-xs font-medium text-gray-600">Deposits</p>
-        </div>
-        <p className="text-xl font-bold text-gray-900">{activeDepositCount}</p>
-        <p className="text-xs text-gray-500">of {depositCount} total</p>
-      </div>
-      
-      {/* USDC Locked */}
-      <div className="bg-gradient-to-br from-green-50 to-white rounded-xl p-4 border border-green-100">
-        <div className="flex items-center gap-2 mb-2">
-          <DollarSign className="h-4 w-4 text-green-600" />
-          <p className="text-xs font-medium text-gray-600">USDC</p>
-        </div>
-        <p className="text-xl font-bold text-gray-900">
-          {parseFloat(totalLockedUSDC).toLocaleString()}
-        </p>
-        <p className="text-xs text-gray-500">locked</p>
-      </div>
-      
-      {/* ETH Locked */}
-      <div className="bg-gradient-to-br from-purple-50 to-white rounded-xl p-4 border border-purple-100">
-        <div className="flex items-center gap-2 mb-2">
-          <TrendingUp className="h-4 w-4 text-purple-600" />
-          <p className="text-xs font-medium text-gray-600">ETH</p>
-        </div>
-        <p className="text-xl font-bold text-gray-900">
-          {parseFloat(totalLockedETH).toFixed(4)}
-        </p>
-        <p className="text-xs text-gray-500">locked</p>
-      </div>
-
-      {/* WBTC Locked */}
-      <div className="bg-gradient-to-br from-orange-50 to-white rounded-xl p-4 border border-orange-100">
-        <div className="flex items-center gap-2 mb-2">
-          <Coins className="h-4 w-4 text-orange-600" />
-          <p className="text-xs font-medium text-gray-600">WBTC</p>
-        </div>
-        <p className="text-xl font-bold text-gray-900">
-          {parseFloat(totalLockedWBTC).toFixed(8)}
-        </p>
-        <p className="text-xs text-gray-500">locked</p>
-      </div>
-      
-      {/* Total in Contract */}
-      <div className="bg-gradient-to-br from-indigo-50 to-white rounded-xl p-4 border border-indigo-100">
-        <div className="flex items-center gap-2 mb-2">
-          <TrendingUp className="h-4 w-4 text-indigo-600" />
-          <p className="text-xs font-medium text-gray-600">TVL</p>
-        </div>
-        <p className="text-sm font-bold text-gray-900">
-          {parseFloat(contractUSDCBalance).toLocaleString()} USDC
-        </p>
-        <p className="text-xs text-gray-600">
-          {parseFloat(contractETHBalance).toFixed(4)} ETH
-        </p>
-        <p className="text-xs text-gray-600">
-          {parseFloat(contractWBTCBalance).toFixed(6)} WBTC
-        </p>
-      </div>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      {stats.map((stat, index) => (
+        <Card
+          key={stat.label}
+          className="group hover:shadow-xl transition-all duration-300 hover:-translate-y-1 border-0 overflow-hidden"
+          style={{ animationDelay: `${index * 100}ms` }}
+        >
+          <div className={`h-1 bg-gradient-to-r ${stat.gradient}`}></div>
+          <CardContent className={`pt-6 pb-5 bg-gradient-to-br ${stat.bgGradient}`}>
+            <div className="flex items-start justify-between mb-3">
+              <div className={`p-2 rounded-lg bg-gradient-to-br ${stat.gradient} shadow-md group-hover:scale-110 transition-transform`}>
+                <div className="text-white">{stat.icon}</div>
+              </div>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-600 mb-1">{stat.label}</p>
+              <p className="text-2xl font-black text-gray-900 tracking-tight">
+                {stat.value}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
 }
