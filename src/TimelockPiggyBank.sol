@@ -140,7 +140,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
 
         // Create deposit record
         uint256 depositId = userDepositCount[msg.sender];
-        
+
         userDeposits[msg.sender][depositId] = Deposit({
             amount: amount,
             lockDuration: lockDuration,
