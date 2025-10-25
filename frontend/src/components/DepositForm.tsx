@@ -28,7 +28,7 @@ export function DepositForm() {
 
   const [depositType, setDepositType] = useState<'USDC' | 'ETH' | 'WBTC'>('USDC');
   const [amount, setAmount] = useState('');
-  const [lockDuration, setLockDuration] = useState<LockDuration>('3 mins');
+  const [lockDuration, setLockDuration] = useState<LockDuration>('3 months');
   const [isApproving, setIsApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);

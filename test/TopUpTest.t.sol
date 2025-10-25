@@ -15,10 +15,10 @@ contract TopUpTest is Test {
     address public user1 = address(2);
     address public user2 = address(3);
 
-    uint256 public constant LOCK_3_MONTHS = 3 minutes;
-    uint256 public constant LOCK_6_MONTHS = 6 minutes;
-    uint256 public constant LOCK_9_MONTHS = 9 minutes;
-    uint256 public constant LOCK_12_MONTHS = 12 minutes;
+    uint256 public constant LOCK_3_MONTHS = 90 days;
+    uint256 public constant LOCK_6_MONTHS = 180 days;
+    uint256 public constant LOCK_9_MONTHS = 270 days;
+    uint256 public constant LOCK_12_MONTHS = 360 days;
 
     uint256 public constant USDC_100 = 100 * 10 ** 6;
     uint256 public constant USDC_50 = 50 * 10 ** 6;

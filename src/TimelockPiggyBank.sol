@@ -15,11 +15,11 @@ import "openzeppelin-contracts/contracts/utils/Pausable.sol";
 contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     using SafeERC20 for IERC20;
 
-    // Lock duration options in seconds (converted from minutes)
-    uint256 public constant LOCK_3_MONTHS = 3 minutes; // 3 minutes
-    uint256 public constant LOCK_6_MONTHS = 6 minutes; // 6 minutes
-    uint256 public constant LOCK_9_MONTHS = 9 minutes; // 9 minutes
-    uint256 public constant LOCK_12_MONTHS = 12 minutes; // 12 minutes
+    // Lock duration options in seconds (converted from months)
+    uint256 public constant LOCK_3_MONTHS = 90 days; // 3 months (~90 days)
+    uint256 public constant LOCK_6_MONTHS = 180 days; // 6 months (~180 days)
+    uint256 public constant LOCK_9_MONTHS = 270 days; // 9 months (~270 days)
+    uint256 public constant LOCK_12_MONTHS = 360 days; // 12 months (~360 days)
 
     // Token contracts
     IERC20 public immutable usdcToken;
@@ -50,15 +50,39 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     bool public whitelistEnabled;
 
     // Events
-    event DepositCreated(address indexed user, uint256 indexed depositId, uint256 amount, uint256 lockDuration);
+    event DepositCreated(
+        address indexed user,
+        uint256 indexed depositId,
+        uint256 amount,
+        uint256 lockDuration
+    );
 
-    event DepositToppedUp(address indexed user, uint256 indexed depositId, uint256 amount, uint256 newTotal);
+    event DepositToppedUp(
+        address indexed user,
+        uint256 indexed depositId,
+        uint256 amount,
+        uint256 newTotal
+    );
 
-    event DepositWithdrawn(address indexed user, uint256 indexed depositId, uint256 amount, address indexed to);
+    event DepositWithdrawn(
+        address indexed user,
+        uint256 indexed depositId,
+        uint256 amount,
+        address indexed to
+    );
 
-    event DepositForwarded(address indexed user, uint256 indexed depositId, uint256 amount, address indexed to);
+    event DepositForwarded(
+        address indexed user,
+        uint256 indexed depositId,
+        uint256 amount,
+        address indexed to
+    );
 
-    event TokensRescued(address indexed token, uint256 amount, address indexed to);
+    event TokensRescued(
+        address indexed token,
+        uint256 amount,
+        address indexed to
+    );
 
     event UserWhitelisted(address indexed user);
     event UserRemovedFromWhitelist(address indexed user);
@@ -104,7 +128,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param amount Amount of USDC to deposit (in 6 decimals)
      * @param lockDuration Lock duration in seconds (must be one of the valid durations)
      */
-    function depositUSDC(uint256 amount, uint256 lockDuration) external nonReentrant whenNotPaused onlyWhitelisted {
+    function depositUSDC(
+        uint256 amount,
+        uint256 lockDuration
+    ) external nonReentrant whenNotPaused onlyWhitelisted {
         if (amount == 0) revert ZeroAmount();
         if (!isValidLockDuration(lockDuration)) revert InvalidLockDuration();
 
@@ -113,6 +140,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
 
         // Create deposit record
         uint256 depositId = userDepositCount[msg.sender];
+        
         userDeposits[msg.sender][depositId] = Deposit({
             amount: amount,
             lockDuration: lockDuration,
@@ -130,7 +158,9 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @dev Deposit ETH into the contract with a specific lock duration
      * @param lockDuration Lock duration in seconds (must be one of the valid durations)
      */
-    function depositETH(uint256 lockDuration) external payable nonReentrant whenNotPaused onlyWhitelisted {
+    function depositETH(
+        uint256 lockDuration
+    ) external payable nonReentrant whenNotPaused onlyWhitelisted {
         if (msg.value == 0) revert ZeroAmount();
         if (!isValidLockDuration(lockDuration)) revert InvalidLockDuration();
 
@@ -154,7 +184,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param amount Amount of WBTC to deposit (in 8 decimals)
      * @param lockDuration Lock duration in seconds (must be one of the valid durations)
      */
-    function depositWBTC(uint256 amount, uint256 lockDuration) external nonReentrant whenNotPaused onlyWhitelisted {
+    function depositWBTC(
+        uint256 amount,
+        uint256 lockDuration
+    ) external nonReentrant whenNotPaused onlyWhitelisted {
         if (amount == 0) revert ZeroAmount();
         if (!isValidLockDuration(lockDuration)) revert InvalidLockDuration();
 
@@ -181,7 +214,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param depositId ID of the deposit to top up
      * @param amount Amount of USDC to add
      */
-    function topUpUSDC(uint256 depositId, uint256 amount) external nonReentrant whenNotPaused onlyWhitelisted {
+    function topUpUSDC(
+        uint256 depositId,
+        uint256 amount
+    ) external nonReentrant whenNotPaused onlyWhitelisted {
         if (amount == 0) revert ZeroAmount();
 
         Deposit storage depositInfo = userDeposits[msg.sender][depositId];
@@ -202,7 +238,9 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @dev Top up an existing ETH deposit
      * @param depositId ID of the deposit to top up
      */
-    function topUpETH(uint256 depositId) external payable nonReentrant whenNotPaused onlyWhitelisted {
+    function topUpETH(
+        uint256 depositId
+    ) external payable nonReentrant whenNotPaused onlyWhitelisted {
         if (msg.value == 0) revert ZeroAmount();
 
         Deposit storage depositInfo = userDeposits[msg.sender][depositId];
@@ -213,7 +251,12 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         // Update deposit amount
         depositInfo.amount += msg.value;
 
-        emit DepositToppedUp(msg.sender, depositId, msg.value, depositInfo.amount);
+        emit DepositToppedUp(
+            msg.sender,
+            depositId,
+            msg.value,
+            depositInfo.amount
+        );
     }
 
     /**
@@ -221,7 +264,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param depositId ID of the deposit to top up
      * @param amount Amount of WBTC to add (in 8 decimals)
      */
-    function topUpWBTC(uint256 depositId, uint256 amount) external nonReentrant whenNotPaused onlyWhitelisted {
+    function topUpWBTC(
+        uint256 depositId,
+        uint256 amount
+    ) external nonReentrant whenNotPaused onlyWhitelisted {
         if (amount == 0) revert ZeroAmount();
 
         Deposit storage depositInfo = userDeposits[msg.sender][depositId];
@@ -259,7 +305,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param depositId ID of the deposit to forward
      * @param to Address to forward the deposit to
      */
-    function forwardDeposit(uint256 depositId, address to) external nonReentrant whenNotPaused {
+    function forwardDeposit(
+        uint256 depositId,
+        address to
+    ) external nonReentrant whenNotPaused {
         if (to == address(0)) revert ZeroAddress();
         _withdraw(msg.sender, depositId, to);
     }
@@ -286,7 +335,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         // Transfer funds to beneficiary based on asset type
         if (depositInfo.assetType == AssetType.ETH) {
             // Transfer ETH
-            (bool success,) = payable(to).call{value: depositInfo.amount}("");
+            (bool success, ) = payable(to).call{value: depositInfo.amount}("");
             if (!success) revert InsufficientBalance();
         } else if (depositInfo.assetType == AssetType.USDC) {
             // Transfer USDC
@@ -305,7 +354,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param depositId ID of the deposit to check
      * @return True if the deposit is unlocked
      */
-    function isDepositUnlocked(address user, uint256 depositId) external view returns (bool) {
+    function isDepositUnlocked(
+        address user,
+        uint256 depositId
+    ) external view returns (bool) {
         Deposit memory depositInfo = userDeposits[user][depositId];
         if (depositInfo.amount == 0) return false;
 
@@ -319,7 +371,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param depositId ID of the deposit
      * @return Deposit information
      */
-    function getDeposit(address user, uint256 depositId) external view returns (Deposit memory) {
+    function getDeposit(
+        address user,
+        uint256 depositId
+    ) external view returns (Deposit memory) {
         return userDeposits[user][depositId];
     }
 
@@ -337,9 +392,14 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param lockDuration Lock duration in seconds
      * @return True if the lock duration is valid
      */
-    function isValidLockDuration(uint256 lockDuration) public pure returns (bool) {
-        return lockDuration == LOCK_3_MONTHS || lockDuration == LOCK_6_MONTHS || lockDuration == LOCK_9_MONTHS
-            || lockDuration == LOCK_12_MONTHS;
+    function isValidLockDuration(
+        uint256 lockDuration
+    ) public pure returns (bool) {
+        return
+            lockDuration == LOCK_3_MONTHS ||
+            lockDuration == LOCK_6_MONTHS ||
+            lockDuration == LOCK_9_MONTHS ||
+            lockDuration == LOCK_12_MONTHS;
     }
 
     /**
@@ -361,7 +421,11 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param amount Amount of tokens to rescue
      * @param to Address to send the rescued tokens to
      */
-    function rescueTokens(address token, uint256 amount, address to) external onlyOwner {
+    function rescueTokens(
+        address token,
+        uint256 amount,
+        address to
+    ) external onlyOwner {
         if (token == address(0)) revert ZeroAddress();
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
@@ -380,7 +444,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         uint256 balance = address(this).balance;
         if (balance == 0) revert ZeroAmount();
 
-        (bool success,) = payable(to).call{value: balance}("");
+        (bool success, ) = payable(to).call{value: balance}("");
         if (!success) revert InsufficientBalance();
 
         emit TokensRescued(address(0), balance, to);
@@ -414,7 +478,9 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @dev Add multiple users to the whitelist (owner only)
      * @param users Array of addresses to whitelist
      */
-    function addMultipleToWhitelist(address[] calldata users) external onlyOwner {
+    function addMultipleToWhitelist(
+        address[] calldata users
+    ) external onlyOwner {
         for (uint256 i = 0; i < users.length; i++) {
             if (users[i] != address(0)) {
                 isWhitelisted[users[i]] = true;
@@ -494,7 +560,9 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param user Address of the user
      * @return Total amount locked (excluding withdrawn deposits)
      */
-    function getTotalLockedAmount(address user) external view returns (uint256) {
+    function getTotalLockedAmount(
+        address user
+    ) external view returns (uint256) {
         uint256 total = 0;
         uint256 count = userDepositCount[user];
 
@@ -513,14 +581,17 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param user Address of the user
      * @return Total amount available for withdrawal
      */
-    function getAvailableWithdrawalAmount(address user) external view returns (uint256) {
+    function getAvailableWithdrawalAmount(
+        address user
+    ) external view returns (uint256) {
         uint256 total = 0;
         uint256 count = userDepositCount[user];
 
         for (uint256 i = 0; i < count; i++) {
             Deposit memory depositInfo = userDeposits[user][i];
             if (!depositInfo.isWithdrawn) {
-                uint256 unlockTime = depositInfo.depositTime + depositInfo.lockDuration;
+                uint256 unlockTime = depositInfo.depositTime +
+                    depositInfo.lockDuration;
                 if (block.timestamp >= unlockTime) {
                     total += depositInfo.amount;
                 }
@@ -541,7 +612,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
 
         for (uint256 i = 0; i < count; i++) {
             Deposit memory depositInfo = userDeposits[user][i];
-            if (!depositInfo.isWithdrawn && depositInfo.assetType == AssetType.USDC) {
+            if (
+                !depositInfo.isWithdrawn &&
+                depositInfo.assetType == AssetType.USDC
+            ) {
                 total += depositInfo.amount;
             }
         }
@@ -560,7 +634,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
 
         for (uint256 i = 0; i < count; i++) {
             Deposit memory depositInfo = userDeposits[user][i];
-            if (!depositInfo.isWithdrawn && depositInfo.assetType == AssetType.ETH) {
+            if (
+                !depositInfo.isWithdrawn &&
+                depositInfo.assetType == AssetType.ETH
+            ) {
                 total += depositInfo.amount;
             }
         }
@@ -579,7 +656,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
 
         for (uint256 i = 0; i < count; i++) {
             Deposit memory depositInfo = userDeposits[user][i];
-            if (!depositInfo.isWithdrawn && depositInfo.assetType == AssetType.WBTC) {
+            if (
+                !depositInfo.isWithdrawn &&
+                depositInfo.assetType == AssetType.WBTC
+            ) {
                 total += depositInfo.amount;
             }
         }
@@ -592,7 +672,9 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @param user Address of the user
      * @return Number of active deposits
      */
-    function getActiveDepositCount(address user) external view returns (uint256) {
+    function getActiveDepositCount(
+        address user
+    ) external view returns (uint256) {
         uint256 activeCount = 0;
         uint256 count = userDepositCount[user];
 

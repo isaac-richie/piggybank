@@ -14,7 +14,7 @@ contract QuickTopUpDemo is Test {
     address public owner = address(1);
     address public user1 = address(2);
 
-    uint256 public constant LOCK_3_MONTHS = 3 minutes;
+    uint256 public constant LOCK_3_MONTHS = 90 days;
     uint256 public constant USDC_50 = 50 * 10 ** 6; // 50 USDC
     uint256 public constant USDC_20 = 20 * 10 ** 6; // 20 USDC
     uint256 public constant USDC_70 = 70 * 10 ** 6; // 70 USDC total
@@ -50,7 +50,7 @@ contract QuickTopUpDemo is Test {
         console.log("");
 
         // Step 2: Deposit 50 USDC
-        console.log("Step 2: Depositing 50 USDC with 3-minute lock...");
+        console.log("Step 2: Depositing 50 USDC with 90-day lock...");
         timelockPiggyBank.depositUSDC(USDC_50, LOCK_3_MONTHS);
 
         (
@@ -63,7 +63,7 @@ contract QuickTopUpDemo is Test {
 
         console.log("   Deposit ID: 0");
         console.log("   Amount deposited:", amount1 / 10 ** 6, "USDC");
-        console.log("   Lock duration:", lockDuration1 / 60, "minutes");
+        console.log("   Lock duration:", lockDuration1 / 1 days, "days");
         console.log("   Asset type:", assetType1 == TimelockPiggyBank.AssetType.USDC ? "USDC" : "Other");
         console.log("   User balance after deposit:", mockUSDC.balanceOf(user1) / 10 ** 6, "USDC");
         console.log("");
@@ -81,7 +81,7 @@ contract QuickTopUpDemo is Test {
         ) = timelockPiggyBank.userDeposits(user1, 0);
 
         console.log("   NEW Amount:", amount2 / 10 ** 6, "USDC");
-        console.log("   Lock duration (unchanged):", lockDuration2 / 60, "minutes");
+        console.log("   Lock duration (unchanged):", lockDuration2 / 1 days, "days");
         console.log("   Deposit time (unchanged):", depositTime2);
         console.log("   User balance after top-up:", mockUSDC.balanceOf(user1) / 10 ** 6, "USDC");
         console.log("");

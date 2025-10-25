@@ -20,7 +20,7 @@ contract TimelockPiggyBankTest is Test {
     uint256 public constant LOCK_3_MONTHS = 90 days;
     uint256 public constant LOCK_6_MONTHS = 180 days;
     uint256 public constant LOCK_9_MONTHS = 270 days;
-    uint256 public constant LOCK_12_MONTHS = 365 days;
+    uint256 public constant LOCK_12_MONTHS = 360 days;
 
     // USDC amounts (6 decimals)
     uint256 public constant USDC_100 = 100 * 10 ** 6;

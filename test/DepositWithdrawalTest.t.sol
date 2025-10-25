@@ -25,7 +25,7 @@ contract DepositWithdrawalTest is Test {
     uint256 public constant LOCK_3_MONTHS = 90 days;
     uint256 public constant LOCK_6_MONTHS = 180 days;
     uint256 public constant LOCK_9_MONTHS = 270 days;
-    uint256 public constant LOCK_12_MONTHS = 365 days;
+    uint256 public constant LOCK_12_MONTHS = 360 days;
 
     event DepositCreated(address indexed user, uint256 indexed depositId, uint256 amount, uint256 lockDuration);
 

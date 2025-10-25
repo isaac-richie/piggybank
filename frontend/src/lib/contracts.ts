@@ -28,12 +28,12 @@ export const NETWORK_CONFIG = {
 //   blockExplorer: "https://basescan.org",
 // };
 
-// Lock durations in seconds (converted from minutes)
+// Lock durations in seconds (converted from months)
 export const LOCK_DURATIONS = {
-  "3 mins": 3 * 60,   // 3 minutes
-  "6 mins": 6 * 60,   // 6 minutes
-  "9 mins": 9 * 60,    // 9 minutes
-  "12 mins": 12 * 60,  // 12 minutes
+  "3 months": 90 * 24 * 60 * 60,   // 90 days
+  "6 months": 180 * 24 * 60 * 60,  // 180 days
+  "9 months": 270 * 24 * 60 * 60,  // 270 days
+  "12 months": 360 * 24 * 60 * 60, // 360 days
 } as const;
 
 export type LockDuration = keyof typeof LOCK_DURATIONS;

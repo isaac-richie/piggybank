@@ -81,8 +81,8 @@ contract DeployScript is Script {
         uint256[] memory lockDurations = timelockPiggyBank.getValidLockDurations();
         console.log("Valid lock durations:");
         for (uint256 i = 0; i < lockDurations.length; i++) {
-            uint256 mins = lockDurations[i] / 60;
-            console.log("  %d. %d seconds (%d minutes)", i + 1, lockDurations[i], mins);
+            uint256 daysDuration = lockDurations[i] / 1 days;
+            console.log("  %d. %d seconds (~%d days)", i + 1, lockDurations[i], daysDuration);
         }
 
         console.log("\nDeployment completed successfully!");
