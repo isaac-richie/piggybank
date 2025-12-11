@@ -4,7 +4,8 @@ import { NETWORK_CONFIG } from './contracts';
 
 export const config = getDefaultConfig({
   appName: 'AssetStrategy',
-  projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || 'your-project-id',
+  // Default to the known project ID to avoid failing when env is missing in deployment
+  projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '6a94c111b5762d5e6c47476bd8d4fcb2',
   chains: [
     {
       ...base,
