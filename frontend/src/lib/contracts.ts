@@ -11,7 +11,8 @@ export const WBTC_ADDRESS = "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c"; // Bas
 export const NETWORK_CONFIG = {
   chainId: 8453, // Base Mainnet
   name: "Base",
-  rpcUrl: "https://mainnet.base.org",
+  // Allow overriding via env to avoid malformed or stale RPC URLs
+  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.base.org",
   blockExplorer: "https://basescan.org",
 };
 

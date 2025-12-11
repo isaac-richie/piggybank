@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTimelockPiggyBank, useDeposit, useUSDC, useWBTC, useContractWrite } from '@/hooks/useContract';
-import { formatUSDC, formatETH, formatDateTime, getTimeRemaining, isDepositUnlocked } from '@/lib/utils';
+import { formatUSDC, formatETH, formatDateTime, getTimeRemaining, isDepositUnlocked, parseUSDC, parseWBTC } from '@/lib/utils';
 import { Clock, DollarSign, Send, Plus, Loader2, CheckCircle2, Lock, Unlock, X } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,8 +22,8 @@ type DepositData = {
 
 export function MyDeposits() {
   const { depositCount, refetchAll: refetchContract } = useTimelockPiggyBank();
-  const { refetchAll: refetchUSDC } = useUSDC();
-  const { refetchAll: refetchWBTC } = useWBTC();
+  const { allowance: usdcAllowance, refetchAll: refetchUSDC } = useUSDC();
+  const { allowance: wbtcAllowance, refetchAll: refetchWBTC } = useWBTC();
   const {
     withdraw,
     forwardDeposit,
@@ -92,20 +92,48 @@ export function MyDeposits() {
     setSuccess(null);
     try {
       if (assetType === 0) {
-        await approveUSDC(amount);
+        // USDC: Check if approval is needed
+        const amountParsed = parseUSDC(amount);
+        const currentAllowance = parseUSDC(usdcAllowance);
+        if (currentAllowance < amountParsed) {
+          await approveUSDC(amount);
+        }
         await topUpUSDC(depositId, amount);
       } else if (assetType === 1) {
+        // ETH: No approval needed, just send value
         const value = BigInt(Math.floor(parseFloat(amount) * 1e18));
         await topUpETH(depositId, value);
       } else if (assetType === 2) {
-        await approveWBTC(amount);
+        // WBTC: Check if approval is needed
+        const amountParsed = parseWBTC(amount);
+        const currentAllowance = parseWBTC(wbtcAllowance);
+        if (currentAllowance < amountParsed) {
+          await approveWBTC(amount);
+        }
         await topUpWBTC(depositId, amount);
       }
       setTopUpAmounts({ ...topUpAmounts, [depositId]: '' });
       setShowTopUp({ ...showTopUp, [depositId]: false });
     } catch (error) {
       console.error('Top up failed:', error);
-      setError(`Top up failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      let errorMessage = 'Top up failed';
+      
+      if (error instanceof Error) {
+        const errorMsg = error.message.toLowerCase();
+        if (errorMsg.includes('not whitelisted') || errorMsg.includes('whitelist')) {
+          errorMessage = 'Your address is not whitelisted. Please contact support to be added to the whitelist.';
+        } else if (errorMsg.includes('insufficient') || errorMsg.includes('balance')) {
+          errorMessage = 'Insufficient balance. Please check your wallet balance.';
+        } else if (errorMsg.includes('allowance')) {
+          errorMessage = 'Insufficient token allowance. Please approve the token first.';
+        } else if (errorMsg.includes('user rejected') || errorMsg.includes('denied')) {
+          errorMessage = 'Transaction was cancelled.';
+        } else {
+          errorMessage = `Top up failed: ${error.message}`;
+        }
+      }
+      
+      setError(errorMessage);
     }
   };
 
