@@ -1,5 +1,4 @@
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
-import { useAccount } from 'wagmi';
+import { useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useAccount } from 'wagmi';
 import { CONTRACT_ADDRESS, USDC_ADDRESS, WBTC_ADDRESS, TIMELOCK_PIGGY_BANK_ABI, USDC_ABI, WBTC_ABI } from '@/lib/contracts';
 import { parseUSDC, formatUSDC, formatETH, parseWBTC, formatWBTC } from '@/lib/utils';
 
@@ -231,7 +230,8 @@ export const useWBTC = () => {
 
 // Hook for contract write operations
 export const useContractWrite = () => {
-  const { writeContract, data: hash, error, isPending } = useWriteContract();
+  const publicClient = usePublicClient();
+  const { writeContractAsync, data: hash, error, isPending } = useWriteContract();
   const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
     hash,
   });
@@ -239,7 +239,7 @@ export const useContractWrite = () => {
   // Deposit USDC
   const depositUSDC = async (amount: string, lockDuration: bigint) => {
     console.log('Calling depositUSDC with:', { amount, lockDuration });
-    return writeContract({
+    return writeContractAsync({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: TIMELOCK_PIGGY_BANK_ABI,
       functionName: 'depositUSDC',
@@ -249,7 +249,7 @@ export const useContractWrite = () => {
 
   // Deposit ETH
   const depositETH = async (lockDuration: bigint, value: bigint) => {
-    return writeContract({
+    return writeContractAsync({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: TIMELOCK_PIGGY_BANK_ABI,
       functionName: 'depositETH',
@@ -261,7 +261,7 @@ export const useContractWrite = () => {
   // Deposit WBTC
   const depositWBTC = async (amount: string, lockDuration: bigint) => {
     console.log('Calling depositWBTC with:', { amount, lockDuration });
-    return writeContract({
+    return writeContractAsync({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: TIMELOCK_PIGGY_BANK_ABI,
       functionName: 'depositWBTC',
@@ -272,7 +272,7 @@ export const useContractWrite = () => {
   // Top up USDC deposit
   const topUpUSDC = async (depositId: number, amount: string) => {
     console.log('Calling topUpUSDC with:', { depositId, amount });
-    return writeContract({
+    return writeContractAsync({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: TIMELOCK_PIGGY_BANK_ABI,
       functionName: 'topUpUSDC',
@@ -283,7 +283,7 @@ export const useContractWrite = () => {
   // Top up ETH deposit
   const topUpETH = async (depositId: number, value: bigint) => {
     console.log('Calling topUpETH with:', { depositId, value });
-    return writeContract({
+    return writeContractAsync({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: TIMELOCK_PIGGY_BANK_ABI,
       functionName: 'topUpETH',
@@ -295,7 +295,7 @@ export const useContractWrite = () => {
   // Top up WBTC deposit
   const topUpWBTC = async (depositId: number, amount: string) => {
     console.log('Calling topUpWBTC with:', { depositId, amount });
-    return writeContract({
+    return writeContractAsync({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: TIMELOCK_PIGGY_BANK_ABI,
       functionName: 'topUpWBTC',
@@ -305,7 +305,7 @@ export const useContractWrite = () => {
 
   // Withdraw deposit
   const withdraw = async (depositId: number) => {
-    return writeContract({
+    return writeContractAsync({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: TIMELOCK_PIGGY_BANK_ABI,
       functionName: 'withdraw',
@@ -315,7 +315,7 @@ export const useContractWrite = () => {
 
   // Forward deposit
   const forwardDeposit = async (depositId: number, to: string) => {
-    return writeContract({
+    return writeContractAsync({
       address: CONTRACT_ADDRESS as `0x${string}`,
       abi: TIMELOCK_PIGGY_BANK_ABI,
       functionName: 'forwardDeposit',
@@ -325,22 +325,28 @@ export const useContractWrite = () => {
 
   // Approve USDC
   const approveUSDC = async (amount: string) => {
-    return writeContract({
+    const txHash = await writeContractAsync({
       address: USDC_ADDRESS as `0x${string}`,
       abi: USDC_ABI,
       functionName: 'approve',
       args: [CONTRACT_ADDRESS as `0x${string}`, parseUSDC(amount)],
     });
+    if (publicClient) {
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+    }
   };
 
   // Approve WBTC
   const approveWBTC = async (amount: string) => {
-    return writeContract({
+    const txHash = await writeContractAsync({
       address: WBTC_ADDRESS as `0x${string}`,
       abi: WBTC_ABI,
       functionName: 'approve',
       args: [CONTRACT_ADDRESS as `0x${string}`, parseWBTC(amount)],
     });
+    if (publicClient) {
+      await publicClient.waitForTransactionReceipt({ hash: txHash });
+    }
   };
 
   return {
