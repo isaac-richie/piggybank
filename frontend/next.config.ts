@@ -24,6 +24,8 @@ const nextConfig: NextConfig = {
       // Using relative path from project root (where next.config.ts is located)
       '@react-native-async-storage/async-storage': './src/lib/stub-modules.ts',
     },
+    // Exclude test files from node_modules to prevent build errors
+    resolveExtensions: ['.js', '.jsx', '.ts', '.tsx', '.json'],
   },
 };
 
