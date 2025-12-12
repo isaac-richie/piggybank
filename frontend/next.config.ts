@@ -1,4 +1,5 @@
 import type { NextConfig } from "next";
+import path from "path";
 
 const nextConfig: NextConfig = {
   // Webpack config for non-Turbopack builds
@@ -19,7 +20,9 @@ const nextConfig: NextConfig = {
   // Turbopack config for Next.js 16+
   turbopack: {
     resolveAlias: {
-      '@react-native-async-storage/async-storage': false,
+      // Point to stub module instead of false (Turbopack doesn't accept boolean values)
+      // Using relative path from project root (where next.config.ts is located)
+      '@react-native-async-storage/async-storage': './src/lib/stub-modules.ts',
     },
   },
 };
