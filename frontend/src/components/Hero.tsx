@@ -3,7 +3,7 @@
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { ArrowRight, Clock, Layers, Lock, ShieldCheck, Wallet } from 'lucide-react';
 import { ASSETS, ASSET_LIST } from '@/lib/assets';
-import { LOCK_DURATIONS } from '@/lib/contracts';
+import { IS_TESTNET, LOCK_DURATIONS, NETWORK_CONFIG } from '@/lib/contracts';
 import { AssetIcon } from '@/components/AssetIcon';
 
 const STEPS = [
@@ -21,8 +21,8 @@ export function Hero() {
         <div className="container relative grid items-center gap-12 py-14 sm:py-20 lg:grid-cols-[1.1fr_0.9fr] lg:py-28">
           <div className="animate-fade-up">
             <span className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted-foreground shadow-sm">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" />
-              Live on Base
+              <span className={IS_TESTNET ? 'h-1.5 w-1.5 rounded-full bg-warning' : 'h-1.5 w-1.5 rounded-full bg-success'} />
+              {IS_TESTNET ? `Testnet · ${NETWORK_CONFIG.name}` : `Live on ${NETWORK_CONFIG.name}`}
             </span>
 
             <h1 className="mt-5 text-balance font-display text-[2.35rem] font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
