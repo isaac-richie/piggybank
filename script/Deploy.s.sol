@@ -34,66 +34,41 @@ contract DeployScript is Script {
     }
 
     function run() public {
-        // Get the network name
         string memory network = vm.envOr("NETWORK", string("localhost"));
-        console.log("Deploying to network:", network);
-
-        // Get the USDC address for the current network
         address usdcAddress = usdcAddresses[network];
-        if (usdcAddress == address(0)) {
-            console.log("USDC address not found for network:", network);
-            console.log("Please update the script with the correct USDC address for this network.");
-            console.log("For local testing, you can deploy a mock USDC token first.");
-            return;
-        }
-
-        // Get the WBTC address for the current network
         address wbtcAddress = wbtcAddresses[network];
-        if (wbtcAddress == address(0)) {
-            console.log("WBTC address not found for network:", network);
-            console.log("Please update the script with the correct WBTC address for this network.");
-            console.log("For local testing, you can deploy a mock WBTC token first.");
-            return;
-        }
+        require(usdcAddress != address(0), string.concat("No USDC address configured for network: ", network));
+        require(wbtcAddress != address(0), string.concat("No WBTC address configured for network: ", network));
+        require(usdcAddress.code.length > 0, "USDC address has no code on this chain");
+        require(wbtcAddress.code.length > 0, "WBTC address has no code on this chain");
 
+        // Optional: hand admin rights to a multisig. With two-step ownership the
+        // new owner must call acceptOwnership() before the transfer takes effect.
+        address finalOwner = vm.envOr("OWNER", address(0));
+
+        console.log("Deploying to network:", network);
         console.log("Using USDC address:", usdcAddress);
         console.log("Using WBTC address:", wbtcAddress);
 
-        // Deploy the contract
         vm.startBroadcast();
-
         TimelockPiggyBank timelockPiggyBank = new TimelockPiggyBank(usdcAddress, wbtcAddress);
-
+        if (finalOwner != address(0)) {
+            timelockPiggyBank.transferOwnership(finalOwner);
+        }
         vm.stopBroadcast();
 
+        require(address(timelockPiggyBank.usdcToken()) == usdcAddress, "USDC mismatch");
+        require(address(timelockPiggyBank.wbtcToken()) == wbtcAddress, "WBTC mismatch");
+        require(!timelockPiggyBank.paused(), "Deployed paused");
+
         console.log("TimelockPiggyBank deployed to: %s", address(timelockPiggyBank));
-
-        // Verify the deployment
-        console.log("Verifying deployment...");
-        console.log("Contract owner:");
-        console.logAddress(timelockPiggyBank.owner());
-        console.log("USDC token address:");
-        console.logAddress(address(timelockPiggyBank.usdcToken()));
-        console.log("WBTC token address:");
-        console.logAddress(address(timelockPiggyBank.wbtcToken()));
-
-        // Get valid lock durations
-        uint256[] memory lockDurations = timelockPiggyBank.getValidLockDurations();
-        console.log("Valid lock durations:");
-        for (uint256 i = 0; i < lockDurations.length; i++) {
-            uint256 daysDuration = lockDurations[i] / 1 days;
-            console.log("  %d. %d seconds (~%d days)", i + 1, lockDurations[i], daysDuration);
+        console.log("Owner:", timelockPiggyBank.owner());
+        if (finalOwner != address(0)) {
+            console.log("Pending owner (must call acceptOwnership):", finalOwner);
         }
 
-        console.log("\nDeployment completed successfully!");
         console.log("\nNext steps:");
-        console.log("1. Verify the contract on Etherscan (if on mainnet/testnet)");
-        console.log("2. Users need to approve the contract to spend their USDC");
-        console.log("3. Users can then call deposit() with their desired lock duration");
-        console.log("\nExample usage:");
-        console.log(
-            "const contract = await ethers.getContractAt('TimelockPiggyBank', '%s');", address(timelockPiggyBank)
-        );
-        console.log("await contract.deposit(ethers.parseUnits('100', 6), %d, userAddress);", lockDurations[0]);
+        console.log("1. Update CONTRACT_ADDRESS in frontend/src/lib/contracts.ts");
+        console.log("2. Make a small test deposit and withdrawal before announcing");
     }
 }

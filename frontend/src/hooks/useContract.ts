@@ -1,369 +1,206 @@
-import { useReadContract, useWriteContract, useWaitForTransactionReceipt, usePublicClient, useAccount } from 'wagmi';
-import { CONTRACT_ADDRESS, USDC_ADDRESS, WBTC_ADDRESS, TIMELOCK_PIGGY_BANK_ABI, USDC_ABI, WBTC_ABI } from '@/lib/contracts';
-import { parseUSDC, formatUSDC, formatETH, parseWBTC, formatWBTC } from '@/lib/utils';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import {
+  useAccount,
+  useBalance,
+  usePublicClient,
+  useReadContract,
+  useReadContracts,
+  useWriteContract,
+} from 'wagmi';
+import { erc20Abi, type Abi, type Address, type Hash } from 'viem';
+import { CONTRACT_ADDRESS, NETWORK_CONFIG, TIMELOCK_PIGGY_BANK_ABI, USDC_ADDRESS, WBTC_ADDRESS } from '@/lib/contracts';
+import { type AssetSymbol } from '@/lib/assets';
 
-// Hook for reading contract data
-export const useTimelockPiggyBank = () => {
-  const { address } = useAccount();
+const vault = {
+  address: CONTRACT_ADDRESS as Address,
+  abi: TIMELOCK_PIGGY_BANK_ABI as Abi,
+  chainId: NETWORK_CONFIG.chainId,
+} as const;
 
-  // Get user deposit count
-  const { data: depositCount = 0n, refetch: refetchDepositCount } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getUserDepositCount',
-    args: address ? [address] : undefined,
-    query: {
-      refetchInterval: 5000, // Auto-refetch every 5 seconds
-    },
-  });
-
-  // Get total locked USDC
-  const { data: totalLockedUSDC = 0n, refetch: refetchTotalLockedUSDC } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getTotalLockedUSDC',
-    args: address ? [address] : undefined,
-    query: {
-      refetchInterval: 5000, // Auto-refetch every 5 seconds
-    },
-  });
-
-  // Get total locked ETH
-  const { data: totalLockedETH = 0n, refetch: refetchTotalLockedETH } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getTotalLockedETH',
-    args: address ? [address] : undefined,
-    query: {
-      refetchInterval: 5000, // Auto-refetch every 5 seconds
-    },
-  });
-
-  // Get total locked WBTC
-  const { data: totalLockedWBTC = 0n, refetch: refetchTotalLockedWBTC } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getTotalLockedWBTC',
-    args: address ? [address] : undefined,
-    query: {
-      refetchInterval: 5000, // Auto-refetch every 5 seconds
-    },
-  });
-
-  // Get active deposit count
-  const { data: activeDepositCount = 0n, refetch: refetchActiveDepositCount } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getActiveDepositCount',
-    args: address ? [address] : undefined,
-    query: {
-      refetchInterval: 5000, // Auto-refetch every 5 seconds
-    },
-  });
-
-  // Get contract USDC balance
-  const { data: contractUSDCBalance = 0n, refetch: refetchUSDCBalance } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getContractBalance',
-  });
-
-  // Get contract ETH balance
-  const { data: contractETHBalance = 0n, refetch: refetchETHBalance } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getContractETHBalance',
-  });
-
-  // Get contract WBTC balance
-  const { data: contractWBTCBalance = 0n, refetch: refetchWBTCBalance } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getContractWBTCBalance',
-  });
-
-  // Get valid lock durations
-  const { data: lockDurations = [] } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getValidLockDurations',
-  });
-
-  // Get contract owner
-  const { data: owner } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'owner',
-  });
-
-  // Check if contract is paused
-  const { data: isPaused = false } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'paused',
-  });
-
-  const refetchAll = () => {
-    refetchDepositCount();
-    refetchActiveDepositCount();
-    refetchTotalLockedUSDC();
-    refetchTotalLockedETH();
-    refetchTotalLockedWBTC();
-    refetchUSDCBalance();
-    refetchETHBalance();
-    refetchWBTCBalance();
-  };
-
-  return {
-    depositCount: Number(depositCount),
-    activeDepositCount: Number(activeDepositCount),
-    totalLockedUSDC: formatUSDC(totalLockedUSDC as bigint),
-    totalLockedETH: formatETH(totalLockedETH as bigint),
-    totalLockedWBTC: formatWBTC(totalLockedWBTC as bigint),
-    contractUSDCBalance: formatUSDC(contractUSDCBalance as bigint),
-    contractETHBalance: formatETH(contractETHBalance as bigint),
-    contractWBTCBalance: formatWBTC(contractWBTCBalance as bigint),
-    lockDurations: lockDurations as bigint[],
-    owner,
-    isPaused,
-    refetchAll,
-  };
+const TOKEN_ADDRESS: Record<Exclude<AssetSymbol, 'ETH'>, Address> = {
+  USDC: USDC_ADDRESS as Address,
+  WBTC: WBTC_ADDRESS as Address,
 };
 
-// Hook for getting specific deposit
-export const useDeposit = (depositId: number) => {
-  const { address } = useAccount();
+// Background refresh is slow on purpose: writes invalidate queries as soon as they confirm.
+const REFRESH_MS = 20_000;
 
-  const { data: deposit, isLoading, error, refetch } = useReadContract({
-    address: CONTRACT_ADDRESS as `0x${string}`,
-    abi: TIMELOCK_PIGGY_BANK_ABI,
-    functionName: 'getDeposit',
-    args: address ? [address, BigInt(depositId)] : undefined,
-    query: {
-      refetchInterval: 3000, // Auto-refetch every 3 seconds for individual deposits
-    },
+export type DepositData = {
+  amount: bigint;
+  lockDuration: bigint;
+  depositTime: bigint;
+  isWithdrawn: boolean;
+  assetType: number;
+};
+
+export type Lock = DepositData & {
+  id: number;
+  unlockTime: number;
+};
+
+// One multicall for every vault-level number the dashboard needs.
+export const usePortfolio = () => {
+  const { address } = useAccount();
+  const user = address as Address;
+
+  const { data, isLoading } = useReadContracts({
+    allowFailure: false,
+    contracts: [
+      { ...vault, functionName: 'getUserDepositCount', args: [user] },
+      { ...vault, functionName: 'getActiveDepositCount', args: [user] },
+      { ...vault, functionName: 'getTotalLockedUSDC', args: [user] },
+      { ...vault, functionName: 'getTotalLockedETH', args: [user] },
+      { ...vault, functionName: 'getTotalLockedWBTC', args: [user] },
+    ],
+    query: { enabled: !!address, refetchInterval: REFRESH_MS },
   });
 
+  const [depositCount, activeCount, usdc, eth, wbtc] = (data ?? [0n, 0n, 0n, 0n, 0n]) as bigint[];
+
   return {
-    deposit,
     isLoading,
-    error,
-    refetch,
+    depositCount: Number(depositCount),
+    activeCount: Number(activeCount),
+    locked: { USDC: usdc, ETH: eth, WBTC: wbtc } as Record<AssetSymbol, bigint>,
   };
 };
 
-// Hook for USDC operations
-export const useUSDC = () => {
+export const useVaultStatus = () => {
+  const { data: isPaused = false } = useReadContract({
+    ...vault,
+    functionName: 'paused',
+    query: { refetchInterval: 60_000 },
+  });
+  return { isPaused: isPaused as boolean };
+};
+
+// Reads every deposit in a single batched request instead of one poll per card.
+export const useLocks = (depositCount: number) => {
   const { address } = useAccount();
 
-  // Get USDC balance
-  const { data: balance = 0n, refetch: refetchBalance } = useReadContract({
-    address: USDC_ADDRESS as `0x${string}`,
-    abi: USDC_ABI,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    query: {
-      refetchInterval: 5000, // Auto-refetch every 5 seconds
-    },
+  const { data, isLoading } = useReadContracts({
+    allowFailure: false,
+    contracts: Array.from({ length: depositCount }, (_, i) => ({
+      ...vault,
+      functionName: 'getDeposit',
+      args: [address as Address, BigInt(i)],
+    })),
+    query: { enabled: !!address && depositCount > 0, refetchInterval: REFRESH_MS },
   });
 
-  // Get allowance
-  const { data: allowance = 0n, refetch: refetchAllowance } = useReadContract({
-    address: USDC_ADDRESS as `0x${string}`,
-    abi: USDC_ABI,
-    functionName: 'allowance',
-    args: address ? [address, CONTRACT_ADDRESS as `0x${string}`] : undefined,
-    query: {
-      refetchInterval: 5000, // Auto-refetch every 5 seconds
-    },
-  });
+  const locks: Lock[] = ((data ?? []) as DepositData[])
+    .map((d, id) => ({ ...d, id, unlockTime: Number(d.depositTime + d.lockDuration) }))
+    .filter((d) => d.amount > 0n)
+    .reverse();
 
-  const refetchAll = () => {
-    refetchBalance();
-    refetchAllowance();
-  };
-
-  return {
-    balance: formatUSDC(balance),
-    allowance: formatUSDC(allowance),
-    refetchAll,
-  };
+  return { locks, isLoading: isLoading && depositCount > 0 };
 };
 
-// Hook for WBTC operations
-export const useWBTC = () => {
+export const useWalletBalances = () => {
   const { address } = useAccount();
+  const user = address as Address;
+  const query = { enabled: !!address, refetchInterval: REFRESH_MS };
 
-  // Get WBTC balance
-  const { data: balance = 0n, refetch: refetchBalance } = useReadContract({
-    address: WBTC_ADDRESS as `0x${string}`,
-    abi: WBTC_ABI,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    query: {
-      refetchInterval: 5000, // Auto-refetch every 5 seconds
-    },
+  const { data: eth } = useBalance({ address, chainId: NETWORK_CONFIG.chainId, query });
+  const { data: tokens } = useReadContracts({
+    allowFailure: false,
+    contracts: [
+      { address: TOKEN_ADDRESS.USDC, abi: erc20Abi, functionName: 'balanceOf', args: [user], chainId: NETWORK_CONFIG.chainId },
+      { address: TOKEN_ADDRESS.WBTC, abi: erc20Abi, functionName: 'balanceOf', args: [user], chainId: NETWORK_CONFIG.chainId },
+    ],
+    query,
   });
-
-  // Get allowance
-  const { data: allowance = 0n, refetch: refetchAllowance } = useReadContract({
-    address: WBTC_ADDRESS as `0x${string}`,
-    abi: WBTC_ABI,
-    functionName: 'allowance',
-    args: address ? [address, CONTRACT_ADDRESS as `0x${string}`] : undefined,
-    query: {
-      refetchInterval: 5000, // Auto-refetch every 5 seconds
-    },
-  });
-
-  const refetchAll = () => {
-    refetchBalance();
-    refetchAllowance();
-  };
 
   return {
-    balance: formatWBTC(balance),
-    allowance: formatWBTC(allowance),
-    refetchAll,
-  };
+    USDC: tokens?.[0],
+    ETH: eth?.value,
+    WBTC: tokens?.[1],
+  } as Record<AssetSymbol, bigint | undefined>;
 };
 
-// Hook for contract write operations
-export const useContractWrite = () => {
-  const publicClient = usePublicClient();
-  const { writeContractAsync, data: hash, error, isPending } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
-    hash,
-  });
+// `chain` is undefined when the wallet sits on a chain this app doesn't configure.
+export const useIsWrongNetwork = () => {
+  const { isConnected, chain } = useAccount();
+  return isConnected && chain?.id !== NETWORK_CONFIG.chainId;
+};
 
-  // Deposit USDC
-  const depositUSDC = async (amount: string, lockDuration: bigint) => {
-    console.log('Calling depositUSDC with:', { amount, lockDuration });
-    return writeContractAsync({
-      address: CONTRACT_ADDRESS as `0x${string}`,
-      abi: TIMELOCK_PIGGY_BANK_ABI,
-      functionName: 'depositUSDC',
-      args: [parseUSDC(amount), lockDuration],
-    });
+// Every write goes through `run`, which waits for the receipt (and any approval first)
+// and then refreshes all reads. `pending` names the action in flight so only that
+// button shows a spinner.
+export const useVaultActions = () => {
+  const { address } = useAccount();
+  const publicClient = usePublicClient({ chainId: NETWORK_CONFIG.chainId });
+  const queryClient = useQueryClient();
+  const { writeContractAsync } = useWriteContract();
+  const [pending, setPending] = useState<{ key: string; step: 'approve' | 'confirm' } | null>(null);
+
+  const waitFor = async (hash: Hash) => {
+    if (!publicClient) throw new Error('Network client unavailable. Please reconnect your wallet.');
+    const receipt = await publicClient.waitForTransactionReceipt({ hash });
+    if (receipt.status !== 'success') throw new Error('The transaction reverted on-chain.');
+    return hash;
   };
 
-  // Deposit ETH
-  const depositETH = async (lockDuration: bigint, value: bigint) => {
-    return writeContractAsync({
-      address: CONTRACT_ADDRESS as `0x${string}`,
-      abi: TIMELOCK_PIGGY_BANK_ABI,
-      functionName: 'depositETH',
-      args: [lockDuration],
-      value,
+  const ensureAllowance = async (key: string, asset: Exclude<AssetSymbol, 'ETH'>, amount: bigint) => {
+    if (!publicClient || !address) throw new Error('Connect your wallet first.');
+    const token = TOKEN_ADDRESS[asset];
+    const allowance = await publicClient.readContract({
+      address: token,
+      abi: erc20Abi,
+      functionName: 'allowance',
+      args: [address, vault.address],
     });
-  };
+    if (allowance >= amount) return;
 
-  // Deposit WBTC
-  const depositWBTC = async (amount: string, lockDuration: bigint) => {
-    console.log('Calling depositWBTC with:', { amount, lockDuration });
-    return writeContractAsync({
-      address: CONTRACT_ADDRESS as `0x${string}`,
-      abi: TIMELOCK_PIGGY_BANK_ABI,
-      functionName: 'depositWBTC',
-      args: [parseWBTC(amount), lockDuration],
-    });
-  };
-
-  // Top up USDC deposit
-  const topUpUSDC = async (depositId: number, amount: string) => {
-    console.log('Calling topUpUSDC with:', { depositId, amount });
-    return writeContractAsync({
-      address: CONTRACT_ADDRESS as `0x${string}`,
-      abi: TIMELOCK_PIGGY_BANK_ABI,
-      functionName: 'topUpUSDC',
-      args: [BigInt(depositId), parseUSDC(amount)],
-    });
-  };
-
-  // Top up ETH deposit
-  const topUpETH = async (depositId: number, value: bigint) => {
-    console.log('Calling topUpETH with:', { depositId, value });
-    return writeContractAsync({
-      address: CONTRACT_ADDRESS as `0x${string}`,
-      abi: TIMELOCK_PIGGY_BANK_ABI,
-      functionName: 'topUpETH',
-      args: [BigInt(depositId)],
-      value,
-    });
-  };
-
-  // Top up WBTC deposit
-  const topUpWBTC = async (depositId: number, amount: string) => {
-    console.log('Calling topUpWBTC with:', { depositId, amount });
-    return writeContractAsync({
-      address: CONTRACT_ADDRESS as `0x${string}`,
-      abi: TIMELOCK_PIGGY_BANK_ABI,
-      functionName: 'topUpWBTC',
-      args: [BigInt(depositId), parseWBTC(amount)],
-    });
-  };
-
-  // Withdraw deposit
-  const withdraw = async (depositId: number) => {
-    return writeContractAsync({
-      address: CONTRACT_ADDRESS as `0x${string}`,
-      abi: TIMELOCK_PIGGY_BANK_ABI,
-      functionName: 'withdraw',
-      args: [BigInt(depositId)],
-    });
-  };
-
-  // Forward deposit
-  const forwardDeposit = async (depositId: number, to: string) => {
-    return writeContractAsync({
-      address: CONTRACT_ADDRESS as `0x${string}`,
-      abi: TIMELOCK_PIGGY_BANK_ABI,
-      functionName: 'forwardDeposit',
-      args: [BigInt(depositId), to as `0x${string}`],
-    });
-  };
-
-  // Approve USDC
-  const approveUSDC = async (amount: string) => {
-    const txHash = await writeContractAsync({
-      address: USDC_ADDRESS as `0x${string}`,
-      abi: USDC_ABI,
+    setPending({ key, step: 'approve' });
+    const hash = await writeContractAsync({
+      address: token,
+      abi: erc20Abi,
       functionName: 'approve',
-      args: [CONTRACT_ADDRESS as `0x${string}`, parseUSDC(amount)],
+      args: [vault.address, amount],
+      chainId: NETWORK_CONFIG.chainId,
     });
-    if (publicClient) {
-      await publicClient.waitForTransactionReceipt({ hash: txHash });
+    await waitFor(hash);
+  };
+
+  const run = async (key: string, action: () => Promise<Hash>) => {
+    setPending({ key, step: 'confirm' });
+    try {
+      return await waitFor(await action());
+    } finally {
+      setPending(null);
+      queryClient.invalidateQueries();
     }
   };
 
-  // Approve WBTC
-  const approveWBTC = async (amount: string) => {
-    const txHash = await writeContractAsync({
-      address: WBTC_ADDRESS as `0x${string}`,
-      abi: WBTC_ABI,
-      functionName: 'approve',
-      args: [CONTRACT_ADDRESS as `0x${string}`, parseWBTC(amount)],
-    });
-    if (publicClient) {
-      await publicClient.waitForTransactionReceipt({ hash: txHash });
-    }
-  };
+  const write = (functionName: string, args: readonly unknown[], value?: bigint) =>
+    writeContractAsync({ ...vault, functionName, args, value });
 
-  return {
-    depositUSDC,
-    depositETH,
-    depositWBTC,
-    topUpUSDC,
-    topUpETH,
-    topUpWBTC,
-    withdraw,
-    forwardDeposit,
-    approveUSDC,
-    approveWBTC,
-    hash,
-    error,
-    isPending,
-    isConfirming,
-    isSuccess,
-  };
+  const deposit = (asset: AssetSymbol, amount: bigint, lockDuration: bigint) =>
+    run('deposit', async () => {
+      if (asset === 'ETH') return write('depositETH', [lockDuration], amount);
+      await ensureAllowance('deposit', asset, amount);
+      setPending({ key: 'deposit', step: 'confirm' });
+      return write(asset === 'USDC' ? 'depositUSDC' : 'depositWBTC', [amount, lockDuration]);
+    });
+
+  const topUp = (asset: AssetSymbol, depositId: number, amount: bigint) =>
+    run(`topup-${depositId}`, async () => {
+      if (asset === 'ETH') return write('topUpETH', [BigInt(depositId)], amount);
+      await ensureAllowance(`topup-${depositId}`, asset, amount);
+      setPending({ key: `topup-${depositId}`, step: 'confirm' });
+      return write(asset === 'USDC' ? 'topUpUSDC' : 'topUpWBTC', [BigInt(depositId), amount]);
+    });
+
+  const withdraw = (depositId: number) =>
+    run(`withdraw-${depositId}`, () => write('withdraw', [BigInt(depositId)]));
+
+  const forward = (depositId: number, to: Address) =>
+    run(`forward-${depositId}`, () => write('forwardDeposit', [BigInt(depositId), to]));
+
+  return { deposit, topUp, withdraw, forward, pending, isBusy: pending !== null };
 };
+
+export const explorerTxUrl = (hash: string) => `${NETWORK_CONFIG.blockExplorer}/tx/${hash}`;
+

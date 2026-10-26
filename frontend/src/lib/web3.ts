@@ -1,6 +1,6 @@
 import { getDefaultConfig } from '@rainbow-me/rainbowkit';
-import { base } from 'wagmi/chains';
-import { NETWORK_CONFIG } from './contracts';
+import { base, baseSepolia } from 'wagmi/chains';
+import { IS_TESTNET, NETWORK_CONFIG } from './contracts';
 
 export const config = getDefaultConfig({
   appName: 'AssetStrategy',
@@ -8,7 +8,7 @@ export const config = getDefaultConfig({
   projectId: process.env.NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID || '6a94c111b5762d5e6c47476bd8d4fcb2',
   chains: [
     {
-      ...base,
+      ...(IS_TESTNET ? baseSepolia : base),
       id: NETWORK_CONFIG.chainId,
       name: NETWORK_CONFIG.name,
       rpcUrls: {

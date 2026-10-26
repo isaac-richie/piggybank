@@ -1,213 +1,219 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useTimelockPiggyBank, useUSDC, useWBTC, useContractWrite } from '@/hooks/useContract';
+import { useState } from 'react';
+import { AlertCircle, Loader2, Lock } from 'lucide-react';
+import { useIsWrongNetwork, useVaultActions, useVaultStatus, useWalletBalances, explorerTxUrl } from '@/hooks/useContract';
+import { ASSETS, ASSET_LIST, type AssetSymbol } from '@/lib/assets';
 import { LOCK_DURATIONS, type LockDuration } from '@/lib/contracts';
-import { Coins, Clock, TrendingUp, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
+import { cn, formatAmount, formatShortDate, sanitizeAmountInput, tryParseAmount } from '@/lib/utils';
+import { getTxErrorMessage } from '@/lib/tx-errors';
+import { toast } from '@/hooks/use-toast';
+import { AssetIcon } from '@/components/AssetIcon';
 
-export function DepositForm() {
-  const { refetchAll: refetchContract } = useTimelockPiggyBank();
-  const { balance: usdcBalance, refetchAll: refetchUSDC } = useUSDC();
-  const { balance: wbtcBalance, refetchAll: refetchWBTC } = useWBTC();
-  const {
-    depositUSDC,
-    depositETH,
-    depositWBTC,
-    approveUSDC,
-    approveWBTC,
-    isPending,
-    isSuccess,
-  } = useContractWrite();
+const DURATIONS = Object.keys(LOCK_DURATIONS) as LockDuration[];
 
-  const [depositType, setDepositType] = useState<'USDC' | 'ETH' | 'WBTC'>('USDC');
+export function DepositForm({ onCreated }: { onCreated?: () => void }) {
+  const balances = useWalletBalances();
+  const { deposit, pending, isBusy } = useVaultActions();
+  const { isPaused } = useVaultStatus();
+  const wrongNetwork = useIsWrongNetwork();
+
+  const [symbol, setSymbol] = useState<AssetSymbol>('USDC');
   const [amount, setAmount] = useState('');
-  const [lockDuration, setLockDuration] = useState<LockDuration>('3 months');
-  const [isApproving, setIsApproving] = useState(false);
+  const [duration, setDuration] = useState<LockDuration>('3 months');
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
 
-  // Show success message only after transaction is confirmed
-  useEffect(() => {
-    if (isSuccess) {
-      setSuccess('Deposit successful! Your funds are now locked.');
-      setAmount('');
-      refetchContract();
-      refetchUSDC();
-      refetchWBTC();
-      setTimeout(() => setSuccess(null), 5000);
-    }
-  }, [isSuccess, refetchContract, refetchUSDC, refetchWBTC]);
+  const asset = ASSETS[symbol];
+  const balance = balances[symbol];
+  const parsed = tryParseAmount(amount, asset.decimals);
+  const insufficient = parsed !== null && balance !== undefined && parsed > balance;
+  const unlockAt = Date.now() / 1000 + LOCK_DURATIONS[duration];
 
-  const handleDeposit = async () => {
-    if (!amount || parseFloat(amount) <= 0) {
-      setError('Please enter a valid amount');
-      return;
-    }
-
+  const selectAsset = (next: AssetSymbol) => {
+    setSymbol(next);
+    setAmount('');
     setError(null);
-    setSuccess(null);
+  };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!parsed) return;
+    setError(null);
     try {
-      const lockDurationSeconds = BigInt(LOCK_DURATIONS[lockDuration]);
-
-      if (depositType === 'USDC') {
-        setIsApproving(true);
-        await approveUSDC(amount);
-        setIsApproving(false);
-        await depositUSDC(amount, lockDurationSeconds);
-      } else if (depositType === 'ETH') {
-        const value = BigInt(Math.floor(parseFloat(amount) * 1e18));
-        await depositETH(lockDurationSeconds, value);
-      } else if (depositType === 'WBTC') {
-        setIsApproving(true);
-        await approveWBTC(amount);
-        setIsApproving(false);
-        await depositWBTC(amount, lockDurationSeconds);
-      }
+      const hash = await deposit(symbol, parsed, BigInt(LOCK_DURATIONS[duration]));
+      toast({
+        title: 'Lock created',
+        description: (
+          <span>
+            {amount} {symbol} locked until {formatShortDate(unlockAt)}.{' '}
+            <a className="font-semibold underline" href={explorerTxUrl(hash)} target="_blank" rel="noopener noreferrer">
+              View transaction
+            </a>
+          </span>
+        ),
+      });
+      setAmount('');
+      onCreated?.();
     } catch (err) {
-      setIsApproving(false);
       console.error('Deposit failed:', err);
-      setError(err instanceof Error ? err.message : 'Deposit failed. Please try again.');
+      setError(getTxErrorMessage(err, 'Could not create the lock. Please try again.'));
     }
   };
 
-  const assetInfo = {
-    USDC: { icon: <Coins className="h-5 w-5" />, balance: usdcBalance, color: 'blue', decimals: 6 },
-    ETH: { icon: <TrendingUp className="h-5 w-5" />, balance: 'N/A', color: 'orange', decimals: 18 },
-    WBTC: { icon: <Coins className="h-5 w-5" />, balance: wbtcBalance, color: 'purple', decimals: 8 },
-  };
+  const submitLabel = (() => {
+    if (pending?.key === 'deposit') {
+      return pending.step === 'approve' ? `Approving ${symbol}…` : 'Locking…';
+    }
+    if (wrongNetwork) return 'Switch network to continue';
+    if (isPaused) return 'Vault paused';
+    if (!amount) return 'Enter an amount';
+    if (!parsed) return 'Enter a valid amount';
+    if (insufficient) return `Not enough ${symbol}`;
+    return `Lock ${amount} ${symbol}`;
+  })();
 
-  const currentAsset = assetInfo[depositType];
+  const disabled = isBusy || wrongNetwork || isPaused || !parsed || insufficient;
 
   return (
-    <Card className="shadow-2xl border-0 bg-gradient-to-br from-white to-gray-50">
-      <CardHeader className="space-y-1 pb-4">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-2xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-            Create Deposit
-          </CardTitle>
-          <div className="flex items-center gap-2 text-sm text-gray-600">
-            <Clock className="h-4 w-4" />
-            <span className="font-medium">{lockDuration}</span>
-          </div>
+    <form onSubmit={handleSubmit} className="rounded-3xl border border-border bg-card p-5 shadow-card sm:p-6">
+      <h2 className="font-display text-xl font-bold">New lock</h2>
+
+      {/* Asset */}
+      <fieldset className="mt-5">
+        <legend className="mb-2 text-sm font-semibold">Asset</legend>
+        <div className="grid grid-cols-3 gap-2">
+          {ASSET_LIST.map((a) => {
+            const active = a.symbol === symbol;
+            const bal = balances[a.symbol];
+            return (
+              <button
+                key={a.symbol}
+                type="button"
+                onClick={() => selectAsset(a.symbol)}
+                aria-pressed={active}
+                className={cn(
+                  'flex flex-col items-center gap-1.5 rounded-2xl border p-3 text-center transition sm:flex-row sm:text-left',
+                  active ? 'border-foreground bg-foreground/[0.03] ring-1 ring-foreground' : 'border-border hover:border-foreground/40'
+                )}
+              >
+                <AssetIcon asset={a} className="h-8 w-8 text-sm" />
+                <span className="min-w-0">
+                  <span className="block text-sm font-semibold">{a.symbol}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground tabular">
+                    {bal === undefined ? '—' : formatAmount(bal, a.decimals, Math.min(a.displayDecimals, 4))}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
         </div>
-        <CardDescription>
-          Lock your crypto and commit to your savings goals
-        </CardDescription>
-      </CardHeader>
+      </fieldset>
 
-      <CardContent className="space-y-6">
-        {/* Asset Selection Tabs */}
-        <Tabs value={depositType} onValueChange={(v) => setDepositType(v as typeof depositType)}>
-          <TabsList className="grid w-full grid-cols-3">
-            <TabsTrigger value="USDC" className="gap-2">
-              <Coins className="h-4 w-4" />
-              USDC
-            </TabsTrigger>
-            <TabsTrigger value="ETH" className="gap-2">
-              <TrendingUp className="h-4 w-4" />
-              ETH
-            </TabsTrigger>
-            <TabsTrigger value="WBTC" className="gap-2">
-              <Coins className="h-4 w-4" />
-              WBTC
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-
-        {/* Amount Input */}
-        <div className="space-y-2">
-          <Label htmlFor="amount" className="text-sm font-medium">
+      {/* Amount */}
+      <div className="mt-5">
+        <div className="mb-2 flex items-center justify-between">
+          <label htmlFor="amount" className="text-sm font-semibold">
             Amount
-          </Label>
-          <div className="relative">
-            <Input
-              id="amount"
-              type="number"
-              placeholder="0.00"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              step={depositType === 'ETH' ? '0.01' : depositType === 'WBTC' ? '0.00000001' : '0.01'}
-              className="text-lg h-12 pr-20"
-            />
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-              <Badge variant="secondary" className="font-medium">
-                {depositType}
-              </Badge>
-            </div>
-          </div>
-          {currentAsset.balance !== 'N/A' && (
-            <p className="text-xs text-gray-500">
-              Balance: <span className="font-medium">{currentAsset.balance} {depositType}</span>
-            </p>
+          </label>
+          {balance !== undefined && (
+            <span className="text-xs text-muted-foreground">
+              Balance{' '}
+              <span className="font-medium text-foreground tabular">
+                {formatAmount(balance, asset.decimals, asset.displayDecimals)} {symbol}
+              </span>
+            </span>
           )}
         </div>
-
-        {/* Lock Duration Selection */}
-        <div className="space-y-2">
-          <Label className="text-sm font-medium">Lock Duration</Label>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-            {(Object.keys(LOCK_DURATIONS) as LockDuration[]).map((duration) => (
-              <Button
-                key={duration}
-                variant={lockDuration === duration ? 'default' : 'outline'}
-                onClick={() => setLockDuration(duration)}
-                className={lockDuration === duration ? 'bg-gradient-to-r from-indigo-600 to-purple-600' : ''}
-              >
-                {duration}
-              </Button>
-            ))}
-          </div>
-        </div>
-
-        {/* Messages */}
-        {success && (
-          <Alert className="bg-green-50 border-green-200">
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-            <AlertDescription className="text-green-800">{success}</AlertDescription>
-          </Alert>
-        )}
-
-        {error && (
-          <Alert className="bg-red-50 border-red-200">
-            <AlertCircle className="h-4 w-4 text-red-600" />
-            <AlertDescription className="text-red-800">{error}</AlertDescription>
-          </Alert>
-        )}
-
-        {/* Deposit Button */}
-        <Button
-          onClick={handleDeposit}
-          disabled={isPending || isApproving || !amount}
-          className="w-full h-12 text-base font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 shadow-lg hover:shadow-xl transition-all"
+        <div
+          className={cn(
+            'flex items-center gap-2 rounded-2xl border bg-background px-4 transition focus-within:ring-2 focus-within:ring-ring/20',
+            insufficient ? 'border-destructive' : 'border-input focus-within:border-foreground'
+          )}
         >
-          {isApproving ? (
+          <input
+            id="amount"
+            inputMode="decimal"
+            autoComplete="off"
+            placeholder="0.00"
+            value={amount}
+            onChange={(e) => setAmount(sanitizeAmountInput(e.target.value, asset.decimals))}
+            className="h-16 w-0 min-w-0 flex-1 bg-transparent font-display text-3xl font-semibold tabular outline-none placeholder:text-muted-foreground/50"
+          />
+          {/* ETH max is left out on purpose: the wallet needs some ETH for gas. */}
+          {symbol !== 'ETH' && balance !== undefined && balance > 0n && (
+            <button
+              type="button"
+              onClick={() => setAmount(formatAmount(balance, asset.decimals, asset.decimals).replace(/,/g, ''))}
+              className="rounded-lg bg-secondary px-2.5 py-1 text-xs font-semibold hover:bg-accent"
+            >
+              Max
+            </button>
+          )}
+          <span className="text-sm font-semibold text-muted-foreground">{symbol}</span>
+        </div>
+      </div>
+
+      {/* Duration */}
+      <fieldset className="mt-5">
+        <legend className="mb-2 text-sm font-semibold">Lock for</legend>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-2 xl:grid-cols-4">
+          {DURATIONS.map((d) => {
+            const active = d === duration;
+            return (
+              <button
+                key={d}
+                type="button"
+                onClick={() => setDuration(d)}
+                aria-pressed={active}
+                className={cn(
+                  'rounded-2xl border px-3 py-3 text-left transition',
+                  active ? 'border-ink bg-ink text-white' : 'border-border hover:border-foreground/40'
+                )}
+              >
+                <span className="block font-display text-lg font-bold leading-tight">{d.replace('months', 'mo')}</span>
+                <span className={cn('block text-[11px]', active ? 'text-white/60' : 'text-muted-foreground')}>
+                  until {formatShortDate(Date.now() / 1000 + LOCK_DURATIONS[d])}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
+
+      {/* Summary */}
+      <div className="mt-5 flex items-start gap-3 rounded-2xl bg-brand-soft p-4 text-sm">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+        <p>
+          {parsed ? (
             <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Approving {depositType}...
-            </>
-          ) : isPending ? (
-            <>
-              <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-              Processing...
+              <span className="font-semibold">
+                {amount} {symbol}
+              </span>{' '}
+              will be locked until <span className="font-semibold">{formatShortDate(unlockAt)}</span>.
             </>
           ) : (
-            `Lock ${amount || '0'} ${depositType}`
-          )}
-        </Button>
+            <>Funds stay locked until <span className="font-semibold">{formatShortDate(unlockAt)}</span>.</>
+          )}{' '}
+          You can add more before then, but can’t withdraw early.
+          {symbol !== 'ETH' && ' First-time locks ask you to approve the token, then confirm.'}
+        </p>
+      </div>
 
-        {/* Info Note */}
-        <div className="text-xs text-center text-gray-500 bg-gray-100 rounded-lg p-3">
-          💡 Funds will be locked for the selected duration. You can top up anytime!
+      {error && (
+        <div role="alert" className="mt-4 flex items-start gap-2.5 rounded-2xl bg-destructive-soft p-3.5 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>{error}</p>
         </div>
-      </CardContent>
-    </Card>
+      )}
+
+      <button
+        type="submit"
+        disabled={disabled}
+        className="mt-5 inline-flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-primary text-base font-semibold text-primary-foreground transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:bg-primary/30"
+      >
+        {pending?.key === 'deposit' && <Loader2 className="h-5 w-5 animate-spin" />}
+        {submitLabel}
+      </button>
+    </form>
   );
 }

@@ -1,33 +1,48 @@
 // Contract configuration and ABI
 import TimelockABI from "./TimelockPiggyBank.abi.json";
 
-// ============================================
-// BASE MAINNET - PRODUCTION (LIVE)
-// ============================================
-export const CONTRACT_ADDRESS = "0xC5c0b76ebBF263DC4D28beA09B6F7BA2C023e820"; // Deployed on Base Mainnet
-export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"; // Base Mainnet USDC
-export const WBTC_ADDRESS = "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c"; // Base Mainnet WBTC
+// Network selection: NEXT_PUBLIC_NETWORK=base (default) or base-sepolia.
+// NEXT_PUBLIC_CONTRACT_ADDRESS overrides the vault address for the chosen network.
+const NETWORKS = {
+  base: {
+    chainId: 8453,
+    name: "Base",
+    rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.base.org",
+    blockExplorer: "https://basescan.org",
+    contract: "0x882BB95ab4B842507520724cd1C543828AA001A5", // v2, deployed 2026-10-26 (v1: 0xC5c0b76ebBF263DC4D28beA09B6F7BA2C023e820)
+    usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+    wbtc: "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c",
+  },
+  "base-sepolia": {
+    chainId: 84532,
+    name: "Base Sepolia",
+    // Separate override so a mainnet NEXT_PUBLIC_RPC_URL never leaks into testnet runs.
+    rpcUrl: process.env.NEXT_PUBLIC_SEPOLIA_RPC_URL || "https://sepolia.base.org",
+    blockExplorer: "https://sepolia.basescan.org",
+    contract: "0x3dB3FC8989d2fcEb51b9c9Cc94621eaE5eB52A68",
+    usdc: "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    wbtc: "0xaa75cE9Ea5448d29e126039F142CB24c6312D5Ed",
+  },
+} as const;
+
+export type NetworkName = keyof typeof NETWORKS;
+
+export const NETWORK_NAME: NetworkName =
+  process.env.NEXT_PUBLIC_NETWORK === "base-sepolia" ? "base-sepolia" : "base";
+
+const network = NETWORKS[NETWORK_NAME];
+
+export const IS_TESTNET = NETWORK_NAME !== "base";
+export const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || network.contract;
+export const USDC_ADDRESS = network.usdc;
+export const WBTC_ADDRESS = network.wbtc;
 
 export const NETWORK_CONFIG = {
-  chainId: 8453, // Base Mainnet
-  name: "Base",
-  // Allow overriding via env to avoid malformed or stale RPC URLs
-  rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.base.org",
-  blockExplorer: "https://basescan.org",
+  chainId: network.chainId,
+  name: network.name,
+  rpcUrl: network.rpcUrl,
+  blockExplorer: network.blockExplorer,
 };
-
-// ============================================
-// BASE SEPOLIA (TESTNET) - FOR TESTING
-// ============================================
-// export const CONTRACT_ADDRESS = "0xBa71207D0e8d7605FA6e001972C3c8B464Bd5F5B";
-// export const USDC_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e"; // Base Sepolia USDC
-// export const WBTC_ADDRESS = "0xaa75cE9Ea5448d29e126039F142CB24c6312D5Ed"; // Base Sepolia WBTC
-// export const NETWORK_CONFIG = {
-//   chainId: 84532, // Base Sepolia
-//   name: "Base Sepolia",
-//   rpcUrl: "https://sepolia.base.org",
-//   blockExplorer: "https://sepolia.basescan.org",
-// };
 
 // Lock durations in seconds (converted from months)
 export const LOCK_DURATIONS = {

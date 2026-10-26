@@ -222,6 +222,152 @@ contract TimelockPiggyBankTest is Test {
         assertEq(balanceAfter - balanceBefore, USDC_100);
     }
 
+    function testRescueCannotRemoveReservedCustomerFunds() public {
+        vm.prank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+
+        vm.expectRevert(TimelockPiggyBank.InsufficientSurplus.selector);
+        timelockPiggyBank.rescueTokens(address(mockUSDC), 1, owner);
+
+        assertEq(mockUSDC.balanceOf(address(timelockPiggyBank)), USDC_100);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 1);
+    }
+
+    function testRescueCanRemoveOnlySurplusAboveCustomerReserves() public {
+        vm.prank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+        mockUSDC.mint(address(timelockPiggyBank), USDC_100);
+
+        timelockPiggyBank.rescueTokens(address(mockUSDC), USDC_100, owner);
+
+        assertEq(mockUSDC.balanceOf(address(timelockPiggyBank)), USDC_100);
+        assertEq(timelockPiggyBank.totalReservedUSDC(), USDC_100);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 1);
+    }
+
+    function testAdminSettlementClosesPositionAndAllowsNewDeposit() public {
+        vm.prank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+
+        uint256 balanceBefore = mockUSDC.balanceOf(user1);
+        timelockPiggyBank.adminSettleDeposit(user1, 0);
+
+        TimelockPiggyBank.Deposit memory settled = timelockPiggyBank.getDeposit(user1, 0);
+        assertTrue(settled.isWithdrawn);
+        assertEq(mockUSDC.balanceOf(user1), balanceBefore + USDC_100);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 0);
+        assertEq(timelockPiggyBank.getTotalLockedUSDC(user1), 0);
+        assertEq(timelockPiggyBank.totalReservedUSDC(), 0);
+
+        vm.prank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_12_MONTHS);
+
+        TimelockPiggyBank.Deposit memory nextDeposit = timelockPiggyBank.getDeposit(user1, 1);
+        assertEq(nextDeposit.amount, USDC_100);
+        assertEq(nextDeposit.lockDuration, LOCK_12_MONTHS);
+        assertFalse(nextDeposit.isWithdrawn);
+        assertEq(timelockPiggyBank.getUserDepositCount(user1), 2);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 1);
+        assertEq(timelockPiggyBank.totalReservedUSDC(), USDC_100);
+
+        vm.warp(block.timestamp + LOCK_12_MONTHS);
+        vm.prank(user1);
+        timelockPiggyBank.withdraw(1);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 0);
+        assertEq(timelockPiggyBank.totalReservedUSDC(), 0);
+    }
+
+    function testAdminBatchSettlementClosesOnlySelectedPositions() public {
+        vm.startPrank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_6_MONTHS);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_9_MONTHS);
+        vm.stopPrank();
+
+        uint256[] memory selected = new uint256[](2);
+        selected[0] = 0;
+        selected[1] = 2;
+        timelockPiggyBank.adminSettleDeposits(user1, selected);
+
+        assertTrue(timelockPiggyBank.getDeposit(user1, 0).isWithdrawn);
+        assertFalse(timelockPiggyBank.getDeposit(user1, 1).isWithdrawn);
+        assertTrue(timelockPiggyBank.getDeposit(user1, 2).isWithdrawn);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 1);
+        assertEq(timelockPiggyBank.getTotalLockedUSDC(user1), USDC_100);
+        assertEq(timelockPiggyBank.totalReservedUSDC(), USDC_100);
+
+        vm.prank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_9_MONTHS);
+        TimelockPiggyBank.Deposit memory added = timelockPiggyBank.getDeposit(user1, 3);
+        assertEq(added.lockDuration, LOCK_9_MONTHS);
+        assertFalse(added.isWithdrawn);
+        assertEq(timelockPiggyBank.getUserDepositCount(user1), 4);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 2);
+        assertEq(timelockPiggyBank.totalReservedUSDC(), USDC_100 * 2);
+    }
+
+    function testAdminBatchSettlementPaysMixedAssetsAndClearsReserves() public {
+        uint256 wbtcAmount = 1 * 10 ** 8;
+        uint256 ethAmount = 1 ether;
+        mockWBTC.mint(user1, wbtcAmount);
+
+        vm.startPrank(user1);
+        mockUSDC.approve(address(timelockPiggyBank), USDC_100);
+        mockWBTC.approve(address(timelockPiggyBank), wbtcAmount);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+        timelockPiggyBank.depositETH{value: ethAmount}(LOCK_6_MONTHS);
+        timelockPiggyBank.depositWBTC(wbtcAmount, LOCK_9_MONTHS);
+        vm.stopPrank();
+
+        uint256[] memory selected = new uint256[](3);
+        selected[0] = 0;
+        selected[1] = 1;
+        selected[2] = 2;
+        uint256 userETHBefore = user1.balance;
+        timelockPiggyBank.adminSettleDeposits(user1, selected);
+
+        assertEq(mockUSDC.balanceOf(user1), USDC_1000);
+        assertEq(mockWBTC.balanceOf(user1), wbtcAmount);
+        assertEq(user1.balance, userETHBefore + ethAmount);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 0);
+        assertEq(timelockPiggyBank.totalReservedUSDC(), 0);
+        assertEq(timelockPiggyBank.totalReservedETH(), 0);
+        assertEq(timelockPiggyBank.totalReservedWBTC(), 0);
+    }
+
+    function testAdminBatchSettlementIsAtomicWhenVaultIsShort() public {
+        vm.startPrank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_6_MONTHS);
+        vm.stopPrank();
+
+        mockUSDC.burn(address(timelockPiggyBank), USDC_100 / 2);
+        uint256[] memory selected = new uint256[](2);
+        selected[0] = 0;
+        selected[1] = 1;
+
+        vm.expectRevert();
+        timelockPiggyBank.adminSettleDeposits(user1, selected);
+
+        assertFalse(timelockPiggyBank.getDeposit(user1, 0).isWithdrawn);
+        assertFalse(timelockPiggyBank.getDeposit(user1, 1).isWithdrawn);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 2);
+        assertEq(timelockPiggyBank.totalReservedUSDC(), USDC_100 * 2);
+        assertEq(mockUSDC.balanceOf(address(timelockPiggyBank)), USDC_100 * 2 - USDC_100 / 2);
+    }
+
+    function testNonOwnerCannotAdminSettleDeposit() public {
+        vm.prank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+
+        vm.prank(user2);
+        vm.expectRevert();
+        timelockPiggyBank.adminSettleDeposit(user1, 0);
+
+        assertFalse(timelockPiggyBank.getDeposit(user1, 0).isWithdrawn);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 1);
+    }
+
     function testPauseUnpause() public {
         timelockPiggyBank.pause();
         assertTrue(timelockPiggyBank.paused());
@@ -497,7 +643,25 @@ contract TimelockPiggyBankTest is Test {
 
         timelockPiggyBank.transferOwnership(newOwner);
 
+        // Two-step: nothing changes until the new owner accepts
+        assertEq(timelockPiggyBank.owner(), owner);
+        assertEq(timelockPiggyBank.pendingOwner(), newOwner);
+
+        vm.prank(newOwner);
+        timelockPiggyBank.acceptOwnership();
+
         assertEq(timelockPiggyBank.owner(), newOwner);
+    }
+
+    function testOnlyPendingOwnerCanAcceptOwnership() public {
+        address newOwner = makeAddr("newOwner");
+        timelockPiggyBank.transferOwnership(newOwner);
+
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        timelockPiggyBank.acceptOwnership();
+
+        assertEq(timelockPiggyBank.owner(), owner);
     }
 
     function testTransferOwnershipToZeroAddress() public {
@@ -533,6 +697,8 @@ contract TimelockPiggyBankTest is Test {
 
         // Transfer ownership
         timelockPiggyBank.transferOwnership(newOwner);
+        vm.prank(newOwner);
+        timelockPiggyBank.acceptOwnership();
 
         // New owner should be able to pause
         vm.prank(newOwner);
@@ -560,6 +726,8 @@ contract TimelockPiggyBankTest is Test {
 
         // Transfer ownership
         timelockPiggyBank.transferOwnership(newOwner);
+        vm.prank(newOwner);
+        timelockPiggyBank.acceptOwnership();
 
         // Old owner should not be able to pause
         vm.expectRevert();
@@ -587,6 +755,8 @@ contract TimelockPiggyBankTest is Test {
 
         // Transfer ownership
         timelockPiggyBank.transferOwnership(newOwner);
+        vm.prank(newOwner);
+        timelockPiggyBank.acceptOwnership();
 
         // Deposits should still be accessible
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 2);
@@ -595,5 +765,81 @@ contract TimelockPiggyBankTest is Test {
         // New owner should be able to access admin functions
         vm.prank(newOwner);
         timelockPiggyBank.pause();
+    }
+
+    function testTopUpAfterUnlockReverts() public {
+        vm.startPrank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+        timelockPiggyBank.depositETH{value: 1 ether}(LOCK_3_MONTHS);
+
+        vm.warp(block.timestamp + LOCK_3_MONTHS);
+
+        vm.expectRevert(TimelockPiggyBank.DepositAlreadyUnlocked.selector);
+        timelockPiggyBank.topUpUSDC(0, USDC_100);
+
+        vm.expectRevert(TimelockPiggyBank.DepositAlreadyUnlocked.selector);
+        timelockPiggyBank.topUpETH{value: 1 ether}(1);
+        vm.stopPrank();
+
+        assertEq(timelockPiggyBank.getTotalLockedUSDC(user1), USDC_100);
+        assertEq(timelockPiggyBank.totalReservedETH(), 1 ether);
+    }
+
+    function testRunningTotalsTrackDepositsTopUpsAndExits() public {
+        vm.startPrank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_6_MONTHS);
+        timelockPiggyBank.depositETH{value: 1 ether}(LOCK_3_MONTHS);
+        timelockPiggyBank.topUpUSDC(1, USDC_100);
+        vm.stopPrank();
+
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 3);
+        assertEq(timelockPiggyBank.getTotalLockedUSDC(user1), USDC_100 * 3);
+        assertEq(timelockPiggyBank.getTotalLockedETH(user1), 1 ether);
+
+        vm.warp(block.timestamp + LOCK_3_MONTHS);
+        vm.prank(user1);
+        timelockPiggyBank.withdraw(0);
+        timelockPiggyBank.adminSettleDeposit(user1, 2);
+
+        assertEq(timelockPiggyBank.getActiveDepositCount(user1), 1);
+        assertEq(timelockPiggyBank.getTotalLockedUSDC(user1), USDC_100 * 2);
+        assertEq(timelockPiggyBank.getTotalLockedETH(user1), 0);
+        assertEq(timelockPiggyBank.getActiveDepositCount(user2), 0);
+    }
+
+    function testGetDepositsPaginates() public {
+        vm.startPrank(user1);
+        timelockPiggyBank.depositUSDC(USDC_100, LOCK_3_MONTHS);
+        timelockPiggyBank.depositETH{value: 1 ether}(LOCK_6_MONTHS);
+        timelockPiggyBank.depositUSDC(USDC_100 * 2, LOCK_12_MONTHS);
+        vm.stopPrank();
+
+        TimelockPiggyBank.Deposit[] memory all = timelockPiggyBank.getDeposits(user1, 0, 10);
+        assertEq(all.length, 3);
+        assertEq(all[1].amount, 1 ether);
+        assertEq(uint256(all[1].assetType), uint256(TimelockPiggyBank.AssetType.ETH));
+
+        TimelockPiggyBank.Deposit[] memory tail = timelockPiggyBank.getDeposits(user1, 1, 1);
+        assertEq(tail.length, 1);
+        assertEq(tail[0].lockDuration, LOCK_6_MONTHS);
+
+        assertEq(timelockPiggyBank.getDeposits(user1, 3, 10).length, 0);
+        assertEq(timelockPiggyBank.getDeposits(user1, 2, type(uint256).max).length, 1);
+        assertEq(timelockPiggyBank.getDeposits(user2, 0, 10).length, 0);
+    }
+
+    function testCannotRenounceOwnershipWhilePaused() public {
+        timelockPiggyBank.pause();
+
+        vm.expectRevert(TimelockPiggyBank.ContractPaused.selector);
+        timelockPiggyBank.renounceOwnership();
+
+        assertEq(timelockPiggyBank.owner(), owner);
+    }
+
+    function testConstructorRejectsSameTokenForUSDCAndWBTC() public {
+        vm.expectRevert(TimelockPiggyBank.InvalidTokenConfig.selector);
+        new TimelockPiggyBank(address(mockUSDC), address(mockUSDC));
     }
 }
