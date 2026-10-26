@@ -9,7 +9,7 @@ const NETWORKS = {
     name: "Base",
     rpcUrl: process.env.NEXT_PUBLIC_RPC_URL || "https://mainnet.base.org",
     blockExplorer: "https://basescan.org",
-    contract: "0xC5c0b76ebBF263DC4D28beA09B6F7BA2C023e820",
+    contract: "0x882BB95ab4B842507520724cd1C543828AA001A5", // v2, deployed 2026-10-26 (v1: 0xC5c0b76ebBF263DC4D28beA09B6F7BA2C023e820)
     usdc: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
     wbtc: "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c",
   },
