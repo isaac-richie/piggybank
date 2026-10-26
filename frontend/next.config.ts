@@ -4,6 +4,17 @@ import path from "path";
 const nextConfig: NextConfig = {
   // Webpack config for non-Turbopack builds
   webpack: (config, { isServer }) => {
+    // @coinbase/cdp-sdk (via wagmi's Base Account connector) imports optional x402
+    // payment packages that this app never uses and that aren't installed.
+    config.resolve.alias = {
+      ...config.resolve.alias,
+      '@x402/core/client': false,
+      '@x402/evm': false,
+      '@x402/evm/exact/client': false,
+      '@x402/evm/upto/client': false,
+      '@x402/svm/exact/client': false,
+    };
+
     // Ignore optional React Native dependencies that aren't needed for web
     if (!isServer) {
       config.resolve.alias = {

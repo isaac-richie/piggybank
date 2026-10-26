@@ -99,6 +99,42 @@
   },
   {
     "type": "function",
+    "name": "adminSettleDeposit",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "depositId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "adminSettleDeposits",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "depositIds",
+        "type": "uint256[]",
+        "internalType": "uint256[]"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
     "name": "depositETH",
     "inputs": [
       {
@@ -275,6 +311,62 @@
         "name": "",
         "type": "tuple",
         "internalType": "struct TimelockPiggyBank.Deposit",
+        "components": [
+          {
+            "name": "amount",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "lockDuration",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "depositTime",
+            "type": "uint256",
+            "internalType": "uint256"
+          },
+          {
+            "name": "isWithdrawn",
+            "type": "bool",
+            "internalType": "bool"
+          },
+          {
+            "name": "assetType",
+            "type": "uint8",
+            "internalType": "enum TimelockPiggyBank.AssetType"
+          }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getDeposits",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "internalType": "address"
+      },
+      {
+        "name": "offset",
+        "type": "uint256",
+        "internalType": "uint256"
+      },
+      {
+        "name": "limit",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [
+      {
+        "name": "page",
+        "type": "tuple[]",
+        "internalType": "struct TimelockPiggyBank.Deposit[]",
         "components": [
           {
             "name": "amount",
@@ -616,6 +708,45 @@
   },
   {
     "type": "function",
+    "name": "totalReservedETH",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalReservedUSDC",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "totalReservedWBTC",
+    "inputs": [],
+    "outputs": [
+      {
+        "name": "",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
     "name": "transferOwnership",
     "inputs": [
       {
@@ -813,6 +944,37 @@
   },
   {
     "type": "event",
+    "name": "DepositSettledByAdmin",
+    "inputs": [
+      {
+        "name": "user",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "depositId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "amount",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      },
+      {
+        "name": "assetType",
+        "type": "uint8",
+        "indexed": false,
+        "internalType": "enum TimelockPiggyBank.AssetType"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
     "name": "DepositToppedUp",
     "inputs": [
       {
@@ -983,6 +1145,16 @@
   },
   {
     "type": "error",
+    "name": "ContractPaused",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "DepositAlreadyUnlocked",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "DepositAlreadyWithdrawn",
     "inputs": []
   },
@@ -1013,12 +1185,22 @@
   },
   {
     "type": "error",
+    "name": "InsufficientSurplus",
+    "inputs": []
+  },
+  {
+    "type": "error",
     "name": "InvalidDepositId",
     "inputs": []
   },
   {
     "type": "error",
     "name": "InvalidLockDuration",
+    "inputs": []
+  },
+  {
+    "type": "error",
+    "name": "InvalidTokenConfig",
     "inputs": []
   },
   {

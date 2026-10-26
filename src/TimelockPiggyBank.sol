@@ -45,6 +45,15 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     mapping(address => mapping(uint256 => Deposit)) public userDeposits;
     mapping(address => uint256) public userDepositCount;
 
+    // Outstanding user liabilities by asset. Admin rescues may only use surplus.
+    uint256 public totalReservedUSDC;
+    uint256 public totalReservedETH;
+    uint256 public totalReservedWBTC;
+
+    // Per-user running totals so balance views never loop over deposit history.
+    mapping(address => mapping(AssetType => uint256)) private _userLocked;
+    mapping(address => uint256) private _userActiveDeposits;
+
     // Whitelist mapping
     mapping(address => bool) public isWhitelisted;
     bool public whitelistEnabled;
@@ -78,6 +87,13 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         address indexed to
     );
 
+    event DepositSettledByAdmin(
+        address indexed user,
+        uint256 indexed depositId,
+        uint256 amount,
+        AssetType assetType
+    );
+
     event TokensRescued(
         address indexed token,
         uint256 amount,
@@ -99,6 +115,10 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     error ZeroAddress();
     error InvalidDepositId();
     error NotWhitelisted();
+    error InsufficientSurplus();
+    error DepositAlreadyUnlocked();
+    error InvalidTokenConfig();
+    error ContractPaused();
 
     /**
      * @dev Constructor
@@ -108,6 +128,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     constructor(address _usdcToken, address _wbtcToken) Ownable(msg.sender) {
         if (_usdcToken == address(0)) revert ZeroAddress();
         if (_wbtcToken == address(0)) revert ZeroAddress();
+        if (_usdcToken == _wbtcToken) revert InvalidTokenConfig();
         usdcToken = IERC20(_usdcToken);
         wbtcToken = IERC20(_wbtcToken);
         whitelistEnabled = false; // Whitelist disabled by default
@@ -132,26 +153,8 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         uint256 amount,
         uint256 lockDuration
     ) external nonReentrant whenNotPaused onlyWhitelisted {
-        if (amount == 0) revert ZeroAmount();
-        if (!isValidLockDuration(lockDuration)) revert InvalidLockDuration();
-
-        // Transfer USDC from user to contract
         usdcToken.safeTransferFrom(msg.sender, address(this), amount);
-
-        // Create deposit record
-        uint256 depositId = userDepositCount[msg.sender];
-
-        userDeposits[msg.sender][depositId] = Deposit({
-            amount: amount,
-            lockDuration: lockDuration,
-            depositTime: block.timestamp,
-            isWithdrawn: false,
-            assetType: AssetType.USDC
-        });
-
-        userDepositCount[msg.sender]++;
-
-        emit DepositCreated(msg.sender, depositId, amount, lockDuration);
+        _createDeposit(AssetType.USDC, amount, lockDuration);
     }
 
     /**
@@ -161,22 +164,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     function depositETH(
         uint256 lockDuration
     ) external payable nonReentrant whenNotPaused onlyWhitelisted {
-        if (msg.value == 0) revert ZeroAmount();
-        if (!isValidLockDuration(lockDuration)) revert InvalidLockDuration();
-
-        // Create deposit record
-        uint256 depositId = userDepositCount[msg.sender];
-        userDeposits[msg.sender][depositId] = Deposit({
-            amount: msg.value,
-            lockDuration: lockDuration,
-            depositTime: block.timestamp,
-            isWithdrawn: false,
-            assetType: AssetType.ETH
-        });
-
-        userDepositCount[msg.sender]++;
-
-        emit DepositCreated(msg.sender, depositId, msg.value, lockDuration);
+        _createDeposit(AssetType.ETH, msg.value, lockDuration);
     }
 
     /**
@@ -188,25 +176,8 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         uint256 amount,
         uint256 lockDuration
     ) external nonReentrant whenNotPaused onlyWhitelisted {
-        if (amount == 0) revert ZeroAmount();
-        if (!isValidLockDuration(lockDuration)) revert InvalidLockDuration();
-
-        // Transfer WBTC from user to contract
         wbtcToken.safeTransferFrom(msg.sender, address(this), amount);
-
-        // Create deposit record
-        uint256 depositId = userDepositCount[msg.sender];
-        userDeposits[msg.sender][depositId] = Deposit({
-            amount: amount,
-            lockDuration: lockDuration,
-            depositTime: block.timestamp,
-            isWithdrawn: false,
-            assetType: AssetType.WBTC
-        });
-
-        userDepositCount[msg.sender]++;
-
-        emit DepositCreated(msg.sender, depositId, amount, lockDuration);
+        _createDeposit(AssetType.WBTC, amount, lockDuration);
     }
 
     /**
@@ -218,20 +189,8 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         uint256 depositId,
         uint256 amount
     ) external nonReentrant whenNotPaused onlyWhitelisted {
-        if (amount == 0) revert ZeroAmount();
-
-        Deposit storage depositInfo = userDeposits[msg.sender][depositId];
-        if (depositInfo.amount == 0) revert DepositNotFound();
-        if (depositInfo.isWithdrawn) revert DepositAlreadyWithdrawn();
-        if (depositInfo.assetType != AssetType.USDC) revert InvalidDepositId();
-
-        // Transfer USDC from user to contract
+        _topUp(depositId, AssetType.USDC, amount);
         usdcToken.safeTransferFrom(msg.sender, address(this), amount);
-
-        // Update deposit amount
-        depositInfo.amount += amount;
-
-        emit DepositToppedUp(msg.sender, depositId, amount, depositInfo.amount);
     }
 
     /**
@@ -241,22 +200,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     function topUpETH(
         uint256 depositId
     ) external payable nonReentrant whenNotPaused onlyWhitelisted {
-        if (msg.value == 0) revert ZeroAmount();
-
-        Deposit storage depositInfo = userDeposits[msg.sender][depositId];
-        if (depositInfo.amount == 0) revert DepositNotFound();
-        if (depositInfo.isWithdrawn) revert DepositAlreadyWithdrawn();
-        if (depositInfo.assetType != AssetType.ETH) revert InvalidDepositId();
-
-        // Update deposit amount
-        depositInfo.amount += msg.value;
-
-        emit DepositToppedUp(
-            msg.sender,
-            depositId,
-            msg.value,
-            depositInfo.amount
-        );
+        _topUp(depositId, AssetType.ETH, msg.value);
     }
 
     /**
@@ -268,18 +212,52 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         uint256 depositId,
         uint256 amount
     ) external nonReentrant whenNotPaused onlyWhitelisted {
+        _topUp(depositId, AssetType.WBTC, amount);
+        wbtcToken.safeTransferFrom(msg.sender, address(this), amount);
+    }
+
+    function _createDeposit(
+        AssetType assetType,
+        uint256 amount,
+        uint256 lockDuration
+    ) internal {
+        if (amount == 0) revert ZeroAmount();
+        if (!isValidLockDuration(lockDuration)) revert InvalidLockDuration();
+
+        uint256 depositId = userDepositCount[msg.sender];
+        userDeposits[msg.sender][depositId] = Deposit({
+            amount: amount,
+            lockDuration: lockDuration,
+            depositTime: block.timestamp,
+            isWithdrawn: false,
+            assetType: assetType
+        });
+
+        userDepositCount[msg.sender]++;
+        _userActiveDeposits[msg.sender]++;
+        _addReservedBalance(msg.sender, assetType, amount);
+
+        emit DepositCreated(msg.sender, depositId, amount, lockDuration);
+    }
+
+    function _topUp(
+        uint256 depositId,
+        AssetType assetType,
+        uint256 amount
+    ) internal {
         if (amount == 0) revert ZeroAmount();
 
         Deposit storage depositInfo = userDeposits[msg.sender][depositId];
         if (depositInfo.amount == 0) revert DepositNotFound();
         if (depositInfo.isWithdrawn) revert DepositAlreadyWithdrawn();
-        if (depositInfo.assetType != AssetType.WBTC) revert InvalidDepositId();
+        if (depositInfo.assetType != assetType) revert InvalidDepositId();
+        // Topping up an unlocked deposit would let funds in and out with no lock at all.
+        if (block.timestamp >= depositInfo.depositTime + depositInfo.lockDuration) {
+            revert DepositAlreadyUnlocked();
+        }
 
-        // Transfer WBTC from user to contract
-        wbtcToken.safeTransferFrom(msg.sender, address(this), amount);
-
-        // Update deposit amount
         depositInfo.amount += amount;
+        _addReservedBalance(msg.sender, assetType, amount);
 
         emit DepositToppedUp(msg.sender, depositId, amount, depositInfo.amount);
     }
@@ -314,6 +292,49 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     }
 
     /**
+     * @dev Settle a user's deposit early by paying the recorded asset directly to them.
+     *      This closes the position and releases its reserved balance atomically.
+     */
+    function adminSettleDeposit(
+        address user,
+        uint256 depositId
+    ) external onlyOwner nonReentrant {
+        _adminSettleDeposit(user, depositId);
+    }
+
+    /**
+     * @dev Settle several deposits for one user. The batch is atomic: if any
+     *      deposit cannot be paid, all settlements in this call are reverted.
+     */
+    function adminSettleDeposits(
+        address user,
+        uint256[] calldata depositIds
+    ) external onlyOwner nonReentrant {
+        if (user == address(0)) revert ZeroAddress();
+        if (depositIds.length == 0) revert InvalidDepositId();
+
+        for (uint256 i = 0; i < depositIds.length; i++) {
+            _adminSettleDeposit(user, depositIds[i]);
+        }
+    }
+
+    function _adminSettleDeposit(address user, uint256 depositId) internal {
+        if (user == address(0)) revert ZeroAddress();
+
+        Deposit storage depositInfo = userDeposits[user][depositId];
+        if (depositInfo.amount == 0) revert DepositNotFound();
+        if (depositInfo.isWithdrawn) revert DepositAlreadyWithdrawn();
+
+        uint256 amount = depositInfo.amount;
+        AssetType assetType = depositInfo.assetType;
+        depositInfo.isWithdrawn = true;
+        _releaseReservedBalance(user, assetType, amount);
+        _transferDepositAsset(assetType, amount, user);
+
+        emit DepositSettledByAdmin(user, depositId, amount, assetType);
+    }
+
+    /**
      * @dev Internal function to handle withdrawals
      * @param user Address of the user who made the deposit
      * @param depositId ID of the deposit to withdraw
@@ -324,28 +345,66 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
 
         if (depositInfo.amount == 0) revert DepositNotFound();
         if (depositInfo.isWithdrawn) revert DepositAlreadyWithdrawn();
-        if (msg.sender != user) revert InvalidDepositId();
 
         uint256 unlockTime = depositInfo.depositTime + depositInfo.lockDuration;
         if (block.timestamp < unlockTime) revert DepositNotUnlocked();
 
-        // Mark as withdrawn
+        uint256 amount = depositInfo.amount;
+        AssetType assetType = depositInfo.assetType;
         depositInfo.isWithdrawn = true;
 
-        // Transfer funds to beneficiary based on asset type
-        if (depositInfo.assetType == AssetType.ETH) {
-            // Transfer ETH
-            (bool success, ) = payable(to).call{value: depositInfo.amount}("");
-            if (!success) revert InsufficientBalance();
-        } else if (depositInfo.assetType == AssetType.USDC) {
-            // Transfer USDC
-            usdcToken.safeTransfer(to, depositInfo.amount);
-        } else if (depositInfo.assetType == AssetType.WBTC) {
-            // Transfer WBTC
-            wbtcToken.safeTransfer(to, depositInfo.amount);
-        }
+        // State changes revert atomically if the transfer fails.
+        _releaseReservedBalance(user, assetType, amount);
+        _transferDepositAsset(assetType, amount, to);
 
-        emit DepositWithdrawn(user, depositId, depositInfo.amount, to);
+        emit DepositWithdrawn(user, depositId, amount, to);
+    }
+
+    function _addReservedBalance(
+        address user,
+        AssetType assetType,
+        uint256 amount
+    ) internal {
+        _userLocked[user][assetType] += amount;
+        if (assetType == AssetType.USDC) {
+            totalReservedUSDC += amount;
+        } else if (assetType == AssetType.ETH) {
+            totalReservedETH += amount;
+        } else if (assetType == AssetType.WBTC) {
+            totalReservedWBTC += amount;
+        }
+    }
+
+    /// @dev Closes a position: releases its reserve and drops it from the user's active totals.
+    function _releaseReservedBalance(
+        address user,
+        AssetType assetType,
+        uint256 amount
+    ) internal {
+        _userLocked[user][assetType] -= amount;
+        _userActiveDeposits[user]--;
+        if (assetType == AssetType.USDC) {
+            totalReservedUSDC -= amount;
+        } else if (assetType == AssetType.ETH) {
+            totalReservedETH -= amount;
+        } else if (assetType == AssetType.WBTC) {
+            totalReservedWBTC -= amount;
+        }
+    }
+
+    function _transferDepositAsset(
+        AssetType assetType,
+        uint256 amount,
+        address to
+    ) internal {
+        if (assetType == AssetType.ETH) {
+            (bool success, ) = payable(to).call{value: amount}("");
+            if (!success) revert InsufficientBalance();
+        } else if (assetType == AssetType.USDC) {
+            usdcToken.safeTransfer(to, amount);
+        } else if (assetType == AssetType.WBTC) {
+            wbtcToken.safeTransfer(to, amount);
+        }
     }
 
     /**
@@ -376,6 +435,28 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         uint256 depositId
     ) external view returns (Deposit memory) {
         return userDeposits[user][depositId];
+    }
+
+    /**
+     * @dev Get a page of a user's deposits in one call (avoids one RPC per deposit)
+     * @param user Address of the user
+     * @param offset First deposit ID to return
+     * @param limit Maximum number of deposits to return
+     * @return page Deposits with IDs offset .. offset + page.length - 1
+     */
+    function getDeposits(
+        address user,
+        uint256 offset,
+        uint256 limit
+    ) external view returns (Deposit[] memory page) {
+        uint256 count = userDepositCount[user];
+        if (offset >= count) return new Deposit[](0);
+
+        uint256 end = count - offset < limit ? count : offset + limit;
+        page = new Deposit[](end - offset);
+        for (uint256 i = offset; i < end; i++) {
+            page[i - offset] = userDeposits[user][i];
+        }
     }
 
     /**
@@ -416,7 +497,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     }
 
     /**
-     * @dev Rescue accidentally sent tokens (owner only)
+     * @dev Rescue token balances above outstanding user deposits (owner only)
      * @param token Address of the token to rescue
      * @param amount Amount of tokens to rescue
      * @param to Address to send the rescued tokens to
@@ -425,29 +506,46 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         address token,
         uint256 amount,
         address to
-    ) external onlyOwner {
+    ) external onlyOwner nonReentrant {
         if (token == address(0)) revert ZeroAddress();
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
+
+        uint256 reserved;
+        if (token == address(usdcToken)) {
+            reserved = totalReservedUSDC;
+        }
+        if (token == address(wbtcToken)) {
+            reserved += totalReservedWBTC;
+        }
+
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        if (balance < reserved || amount > balance - reserved) {
+            revert InsufficientSurplus();
+        }
 
         IERC20(token).safeTransfer(to, amount);
         emit TokensRescued(token, amount, to);
     }
 
     /**
-     * @dev Rescue accidentally sent ETH (owner only)
+     * @dev Rescue ETH balance above outstanding user deposits (owner only)
      * @param to Address to send the rescued ETH to
      */
-    function rescueETH(address to) external onlyOwner {
+    function rescueETH(address to) external onlyOwner nonReentrant {
         if (to == address(0)) revert ZeroAddress();
 
         uint256 balance = address(this).balance;
         if (balance == 0) revert ZeroAmount();
+        if (balance < totalReservedETH) revert InsufficientSurplus();
 
-        (bool success, ) = payable(to).call{value: balance}("");
+        uint256 surplus = balance - totalReservedETH;
+        if (surplus == 0) revert InsufficientSurplus();
+
+        (bool success, ) = payable(to).call{value: surplus}("");
         if (!success) revert InsufficientBalance();
 
-        emit TokensRescued(address(0), balance, to);
+        emit TokensRescued(address(0), surplus, to);
     }
 
     /**
@@ -528,6 +626,8 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @notice This will make the contract ownerless - use with extreme caution!
      */
     function renounceOwnership() public override onlyOwner {
+        // Renouncing while paused would freeze every deposit permanently.
+        if (paused()) revert ContractPaused();
         _transferOwnership(address(0));
     }
 
@@ -556,28 +656,25 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     }
 
     /**
-     * @dev Get the total amount locked for a user
+     * @dev Get the raw sum of all locked base units for a user
+     * @notice Mixes USDC (6), ETH (18) and WBTC (8) decimals, so it is not a value.
+     *         Use the per-asset getters for anything shown to users.
      * @param user Address of the user
      * @return Total amount locked (excluding withdrawn deposits)
      */
     function getTotalLockedAmount(
         address user
     ) external view returns (uint256) {
-        uint256 total = 0;
-        uint256 count = userDepositCount[user];
-
-        for (uint256 i = 0; i < count; i++) {
-            Deposit memory depositInfo = userDeposits[user][i];
-            if (!depositInfo.isWithdrawn) {
-                total += depositInfo.amount;
-            }
-        }
-
-        return total;
+        return
+            _userLocked[user][AssetType.USDC] +
+            _userLocked[user][AssetType.ETH] +
+            _userLocked[user][AssetType.WBTC];
     }
 
     /**
      * @dev Get the total amount available for withdrawal for a user
+     * @notice Raw sum across assets with different decimals; iterates the user's
+     *         full deposit history, so prefer getDeposits for UIs.
      * @param user Address of the user
      * @return Total amount available for withdrawal
      */
@@ -607,20 +704,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @return Total USDC amount locked
      */
     function getTotalLockedUSDC(address user) external view returns (uint256) {
-        uint256 total = 0;
-        uint256 count = userDepositCount[user];
-
-        for (uint256 i = 0; i < count; i++) {
-            Deposit memory depositInfo = userDeposits[user][i];
-            if (
-                !depositInfo.isWithdrawn &&
-                depositInfo.assetType == AssetType.USDC
-            ) {
-                total += depositInfo.amount;
-            }
-        }
-
-        return total;
+        return _userLocked[user][AssetType.USDC];
     }
 
     /**
@@ -629,20 +713,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @return Total ETH amount locked
      */
     function getTotalLockedETH(address user) external view returns (uint256) {
-        uint256 total = 0;
-        uint256 count = userDepositCount[user];
-
-        for (uint256 i = 0; i < count; i++) {
-            Deposit memory depositInfo = userDeposits[user][i];
-            if (
-                !depositInfo.isWithdrawn &&
-                depositInfo.assetType == AssetType.ETH
-            ) {
-                total += depositInfo.amount;
-            }
-        }
-
-        return total;
+        return _userLocked[user][AssetType.ETH];
     }
 
     /**
@@ -651,20 +722,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
      * @return Total WBTC amount locked
      */
     function getTotalLockedWBTC(address user) external view returns (uint256) {
-        uint256 total = 0;
-        uint256 count = userDepositCount[user];
-
-        for (uint256 i = 0; i < count; i++) {
-            Deposit memory depositInfo = userDeposits[user][i];
-            if (
-                !depositInfo.isWithdrawn &&
-                depositInfo.assetType == AssetType.WBTC
-            ) {
-                total += depositInfo.amount;
-            }
-        }
-
-        return total;
+        return _userLocked[user][AssetType.WBTC];
     }
 
     /**
@@ -675,15 +733,6 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     function getActiveDepositCount(
         address user
     ) external view returns (uint256) {
-        uint256 activeCount = 0;
-        uint256 count = userDepositCount[user];
-
-        for (uint256 i = 0; i < count; i++) {
-            if (!userDeposits[user][i].isWithdrawn) {
-                activeCount++;
-            }
-        }
-
-        return activeCount;
+        return _userActiveDeposits[user];
     }
 }

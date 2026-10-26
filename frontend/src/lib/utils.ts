@@ -104,3 +104,35 @@ export const getTimeRemaining = (depositTime: bigint, lockDuration: bigint) => {
     return `${minutes}m`;
   }
 };
+
+// Format a base-unit amount for display without going through floats.
+export const formatAmount = (value: bigint, decimals: number, maxFraction: number) => {
+  if (value === 0n) return '0';
+  const [int, frac = ''] = formatUnits(value, decimals).split('.');
+  const trimmed = frac.slice(0, maxFraction).replace(/0+$/, '');
+  if (int === '0' && !trimmed) return `<0.${'0'.repeat(Math.max(maxFraction - 1, 0))}1`;
+  const intFormatted = BigInt(int).toLocaleString('en-US');
+  return trimmed ? `${intFormatted}.${trimmed}` : intFormatted;
+};
+
+// Keep amount inputs to digits, one dot, and at most `decimals` fraction digits.
+export const sanitizeAmountInput = (raw: string, decimals: number) => {
+  const cleaned = raw.replace(',', '.').replace(/[^\d.]/g, '');
+  const [int, ...rest] = cleaned.split('.');
+  if (rest.length === 0) return int;
+  return `${int}.${rest.join('').slice(0, decimals)}`;
+};
+
+// Parse a user-entered amount; returns null for empty, zero or malformed input.
+export const tryParseAmount = (amount: string, decimals: number): bigint | null => {
+  if (!/^\d*\.?\d*$/.test(amount) || amount === '' || amount === '.') return null;
+  try {
+    const value = parseUnits(amount, decimals);
+    return value > 0n ? value : null;
+  } catch {
+    return null;
+  }
+};
+
+export const formatShortDate = (unixSeconds: number) =>
+  new Date(unixSeconds * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });

@@ -1,497 +1,373 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useTimelockPiggyBank, useDeposit, useUSDC, useWBTC, useContractWrite } from '@/hooks/useContract';
-import { formatUSDC, formatETH, formatDateTime, getTimeRemaining, isDepositUnlocked, parseUSDC, parseWBTC } from '@/lib/utils';
-import { Clock, DollarSign, Send, Plus, Loader2, CheckCircle2, Lock, Unlock, X } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Separator } from '@/components/ui/separator';
+import { useState } from 'react';
+import { isAddress, type Address } from 'viem';
+import { AlertCircle, ArrowDownToLine, CheckCircle2, Loader2, Lock, Plus, Send, Unlock, X } from 'lucide-react';
+import { explorerTxUrl, useIsWrongNetwork, useVaultActions, useVaultStatus, useWalletBalances, type Lock as LockData } from '@/hooks/useContract';
+import { useNow } from '@/hooks/useNow';
+import { assetById } from '@/lib/assets';
+import { cn, formatAmount, formatShortDate, sanitizeAmountInput, tryParseAmount } from '@/lib/utils';
+import { getTxErrorMessage } from '@/lib/tx-errors';
+import { toast } from '@/hooks/use-toast';
+import { AssetIcon } from '@/components/AssetIcon';
+import { Skeleton } from '@/components/ui/skeleton';
 
-type DepositData = {
-  amount: bigint;
-  lockDuration: bigint;
-  depositTime: bigint;
-  isWithdrawn: boolean;
-  assetType: number;
-};
+type Filter = 'open' | 'ready' | 'closed';
+type Status = 'locked' | 'ready' | 'closed';
 
-export function MyDeposits() {
-  const { depositCount, refetchAll: refetchContract } = useTimelockPiggyBank();
-  const { allowance: usdcAllowance, refetchAll: refetchUSDC } = useUSDC();
-  const { allowance: wbtcAllowance, refetchAll: refetchWBTC } = useWBTC();
-  const {
-    withdraw,
-    forwardDeposit,
-    topUpUSDC,
-    topUpETH,
-    topUpWBTC,
-    approveUSDC,
-    approveWBTC,
-    isPending,
-    isSuccess,
-  } = useContractWrite();
-  const [forwardingTo, setForwardingTo] = useState<{ [key: number]: string }>({});
-  const [topUpAmounts, setTopUpAmounts] = useState<{ [key: number]: string }>({});
-  const [showTopUp, setShowTopUp] = useState<{ [key: number]: boolean }>({});
-  const [showForward, setShowForward] = useState<{ [key: number]: boolean }>({});
-  const [success, setSuccess] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+const statusOf = (lock: LockData, now: number): Status =>
+  lock.isWithdrawn ? 'closed' : now >= lock.unlockTime ? 'ready' : 'locked';
 
-  useEffect(() => {
-    if (isSuccess) {
-      setSuccess('Transaction successful!');
-      refetchContract();
-      refetchUSDC();
-      refetchWBTC();
-      setRefreshKey(prev => prev + 1);
-      setTimeout(() => setSuccess(null), 5000);
-    }
-  }, [isSuccess, refetchContract, refetchUSDC, refetchWBTC]);
+export function MyDeposits({ locks, isLoading }: { locks: LockData[]; isLoading: boolean }) {
+  const now = useNow();
+  const [filter, setFilter] = useState<Filter>('open');
 
-  const handleWithdraw = async (depositId: number) => {
-    setError(null);
-    setSuccess(null);
-    try {
-      await withdraw(depositId);
-    } catch (error) {
-      console.error('Withdrawal failed:', error);
-      setError(`Withdrawal failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
+  const counts = {
+    open: locks.filter((l) => !l.isWithdrawn).length,
+    ready: locks.filter((l) => statusOf(l, now) === 'ready').length,
+    closed: locks.filter((l) => l.isWithdrawn).length,
   };
 
-  const handleForward = async (depositId: number) => {
-    const to = forwardingTo[depositId];
-    if (!to) return;
+  const visible = locks.filter((l) => {
+    const status = statusOf(l, now);
+    if (filter === 'open') return status !== 'closed';
+    return status === filter;
+  });
 
-    setError(null);
-    setSuccess(null);
-    try {
-      await forwardDeposit(depositId, to);
-      setForwardingTo({ ...forwardingTo, [depositId]: '' });
-      setShowForward({ ...showForward, [depositId]: false });
-    } catch (error) {
-      console.error('Forward failed:', error);
-      setError(`Forward failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    }
-  };
-
-  const handleTopUp = async (depositId: number, assetType: number) => {
-    const amount = topUpAmounts[depositId];
-    if (!amount || parseFloat(amount) <= 0) {
-      setError('Please enter a valid amount to top up');
-      return;
-    }
-
-    setError(null);
-    setSuccess(null);
-    try {
-      if (assetType === 0) {
-        // USDC: Check if approval is needed
-        const amountParsed = parseUSDC(amount);
-        const currentAllowance = parseUSDC(usdcAllowance);
-        if (currentAllowance < amountParsed) {
-          await approveUSDC(amount);
-        }
-        await topUpUSDC(depositId, amount);
-      } else if (assetType === 1) {
-        // ETH: No approval needed, just send value
-        const value = BigInt(Math.floor(parseFloat(amount) * 1e18));
-        await topUpETH(depositId, value);
-      } else if (assetType === 2) {
-        // WBTC: Check if approval is needed
-        const amountParsed = parseWBTC(amount);
-        const currentAllowance = parseWBTC(wbtcAllowance);
-        if (currentAllowance < amountParsed) {
-          await approveWBTC(amount);
-        }
-        await topUpWBTC(depositId, amount);
-      }
-      setTopUpAmounts({ ...topUpAmounts, [depositId]: '' });
-      setShowTopUp({ ...showTopUp, [depositId]: false });
-    } catch (error) {
-      console.error('Top up failed:', error);
-      let errorMessage = 'Top up failed';
-      
-      if (error instanceof Error) {
-        const errorMsg = error.message.toLowerCase();
-        if (errorMsg.includes('not whitelisted') || errorMsg.includes('whitelist')) {
-          errorMessage = 'Your address is not whitelisted. Please contact support to be added to the whitelist.';
-        } else if (errorMsg.includes('insufficient') || errorMsg.includes('balance')) {
-          errorMessage = 'Insufficient balance. Please check your wallet balance.';
-        } else if (errorMsg.includes('allowance')) {
-          errorMessage = 'Insufficient token allowance. Please approve the token first.';
-        } else if (errorMsg.includes('user rejected') || errorMsg.includes('denied')) {
-          errorMessage = 'Transaction was cancelled.';
-        } else {
-          errorMessage = `Top up failed: ${error.message}`;
-        }
-      }
-      
-      setError(errorMessage);
-    }
-  };
-
-  if (depositCount === 0) {
-    return (
-      <Card className="shadow-2xl border-0 bg-gradient-to-br from-white to-gray-50">
-        <CardContent className="py-16">
-          <div className="text-center">
-            <div className="mx-auto w-20 h-20 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full flex items-center justify-center mb-6">
-              <Clock className="h-10 w-10 text-gray-400" />
-            </div>
-            <h3 className="text-2xl font-bold text-gray-900 mb-2">No Deposits Yet</h3>
-            <p className="text-gray-600">Make your first deposit above to start your savings journey!</p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
+  const tabs: { id: Filter; label: string }[] = [
+    { id: 'open', label: 'Open' },
+    { id: 'ready', label: 'Ready' },
+    { id: 'closed', label: 'Closed' },
+  ];
 
   return (
-    <div className="space-y-4">
-      {/* Header Card */}
-      <Card className="shadow-lg border-0 bg-gradient-to-r from-indigo-600 to-purple-600 text-white">
-        <CardHeader>
-          <CardTitle className="text-2xl flex items-center gap-3">
-            <Clock className="h-7 w-7" />
-            My Savings
-          </CardTitle>
-          <CardDescription className="text-indigo-100">
-            {depositCount} {depositCount === 1 ? 'deposit' : 'deposits'} · Manage your time-locked assets
-          </CardDescription>
-        </CardHeader>
-      </Card>
-
-      {/* Messages */}
-      {success && (
-        <Alert className="bg-green-50 border-green-200">
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
-          <AlertDescription className="text-green-800">{success}</AlertDescription>
-        </Alert>
-      )}
-
-      {error && (
-        <Alert className="bg-red-50 border-red-200">
-          <X className="h-4 w-4 text-red-600" />
-          <AlertDescription className="text-red-800">{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Deposits Grid */}
-      <div className="grid gap-4">
-        {Array.from({ length: depositCount }, (_, i) => (
-          <DepositCard
-            key={`${i}-${refreshKey}`}
-            depositId={i}
-            onWithdraw={handleWithdraw}
-            onForward={handleForward}
-            onTopUp={handleTopUp}
-            forwardingTo={forwardingTo[i] || ''}
-            setForwardingTo={(to) => setForwardingTo({ ...forwardingTo, [i]: to })}
-            topUpAmount={topUpAmounts[i] || ''}
-            setTopUpAmount={(amount) => setTopUpAmounts({ ...topUpAmounts, [i]: amount })}
-            showTopUp={showTopUp[i] || false}
-            setShowTopUp={(show) => setShowTopUp({ ...showTopUp, [i]: show })}
-            showForward={showForward[i] || false}
-            setShowForward={(show) => setShowForward({ ...showForward, [i]: show })}
-            isPending={isPending}
-            refreshKey={refreshKey}
-          />
-        ))}
+    <section>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="font-display text-xl font-bold">Your locks</h2>
+        <div role="tablist" className="inline-flex rounded-xl bg-secondary p-1">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              role="tab"
+              aria-selected={filter === tab.id}
+              onClick={() => setFilter(tab.id)}
+              className={cn(
+                'rounded-lg px-3 py-1.5 text-xs font-semibold transition sm:text-sm',
+                filter === tab.id ? 'bg-card text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground'
+              )}
+            >
+              {tab.label}
+              <span className="ml-1.5 tabular text-muted-foreground">{counts[tab.id]}</span>
+            </button>
+          ))}
+        </div>
       </div>
+
+      {isLoading ? (
+        <div className="space-y-3">
+          {[0, 1].map((i) => (
+            <Skeleton key={i} className="h-44 rounded-3xl" />
+          ))}
+        </div>
+      ) : visible.length === 0 ? (
+        <EmptyState filter={filter} hasAny={locks.length > 0} />
+      ) : (
+        <div className="space-y-3">
+          {visible.map((lock) => (
+            <LockCard key={lock.id} lock={lock} now={now} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function EmptyState({ filter, hasAny }: { filter: Filter; hasAny: boolean }) {
+  const copy = {
+    open: hasAny
+      ? { title: 'No open locks', body: 'Everything has been withdrawn. Start a new lock whenever you’re ready.' }
+      : { title: 'No locks yet', body: 'Create your first lock and it will show up here with a live countdown.' },
+    ready: { title: 'Nothing ready yet', body: 'Locks appear here once their unlock date passes.' },
+    closed: { title: 'No closed locks', body: 'Withdrawn and settled locks will be listed here.' },
+  }[filter];
+
+  return (
+    <div className="flex flex-col items-center rounded-3xl border border-dashed border-border bg-card/60 px-6 py-14 text-center">
+      <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-secondary">
+        <Lock className="h-5 w-5 text-muted-foreground" />
+      </div>
+      <p className="mt-4 font-display text-lg font-semibold">{copy.title}</p>
+      <p className="mt-1 max-w-xs text-sm text-muted-foreground">{copy.body}</p>
     </div>
   );
 }
 
-function DepositCard({
-  depositId,
-  onWithdraw,
-  onForward,
-  onTopUp,
-  forwardingTo,
-  setForwardingTo,
-  topUpAmount,
-  setTopUpAmount,
-  showTopUp,
-  setShowTopUp,
-  showForward,
-  setShowForward,
-  isPending,
-  refreshKey,
-}: {
-  depositId: number;
-  onWithdraw: (id: number) => void;
-  onForward: (id: number) => void;
-  onTopUp: (id: number, assetType: number) => void;
-  forwardingTo: string;
-  setForwardingTo: (to: string) => void;
-  topUpAmount: string;
-  setTopUpAmount: (amount: string) => void;
-  showTopUp: boolean;
-  setShowTopUp: (show: boolean) => void;
-  showForward: boolean;
-  setShowForward: (show: boolean) => void;
-  isPending: boolean;
-  refreshKey: number;
-}) {
-  const { deposit, isLoading, error, refetch } = useDeposit(depositId);
+function formatCountdown(seconds: number) {
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.max(1, Math.floor((seconds % 3600) / 60));
+  if (days > 0) return `${days}d ${hours}h left`;
+  if (hours > 0) return `${hours}h ${minutes}m left`;
+  return `${minutes}m left`;
+}
 
-  useEffect(() => {
-    refetch();
-  }, [refreshKey, refetch]);
+function LockCard({ lock, now }: { lock: LockData; now: number }) {
+  const asset = assetById(Number(lock.assetType));
+  const status = statusOf(lock, now);
+  const months = Math.round(Number(lock.lockDuration) / 86400 / 30);
+  const start = Number(lock.depositTime);
+  const progress = Math.min(100, Math.max(0, ((now - start) / Number(lock.lockDuration)) * 100));
 
-  if (isLoading) {
-    return (
-      <Card>
-        <CardContent className="py-8 text-center">
-          <Loader2 className="h-8 w-8 animate-spin mx-auto text-gray-400" />
-        </CardContent>
-      </Card>
-    );
-  }
+  const { topUp, withdraw, forward, pending, isBusy } = useVaultActions();
+  const { isPaused } = useVaultStatus();
+  const wrongNetwork = useIsWrongNetwork();
+  const balances = useWalletBalances();
 
-  if (error) {
-    return (
-      <Card className="border-red-200 bg-red-50">
-        <CardContent className="py-6">
-          <p className="text-red-700 text-center">Error loading deposit #{depositId}</p>
-        </CardContent>
-      </Card>
-    );
-  }
+  const [panel, setPanel] = useState<'topup' | 'forward' | null>(null);
+  const [topUpAmount, setTopUpAmount] = useState('');
+  const [forwardTo, setForwardTo] = useState('');
+  const [error, setError] = useState<string | null>(null);
 
-  if (!deposit) {
-    return null;
-  }
+  const blocked = isBusy || isPaused || wrongNetwork;
+  const parsedTopUp = tryParseAmount(topUpAmount, asset.decimals);
+  const balance = balances[asset.symbol];
+  const topUpTooBig = parsedTopUp !== null && balance !== undefined && parsedTopUp > balance;
+  const forwardValid = isAddress(forwardTo);
+  const isPendingKey = (key: string) => pending?.key === `${key}-${lock.id}`;
 
-  const depositData = deposit as unknown as DepositData;
-
-  if (!depositData.amount || depositData.amount === 0n) {
-    return null;
-  }
-
-  const amount = depositData.amount;
-  const lockDuration = depositData.lockDuration;
-  const depositTime = depositData.depositTime;
-  const isWithdrawn = depositData.isWithdrawn;
-  const assetType = depositData.assetType;
-
-  const unlocked = isDepositUnlocked(depositTime, lockDuration);
-  const timeRemaining = getTimeRemaining(depositTime, lockDuration);
-
-  const isETH = Number(assetType) === 1;
-  const isWBTC = Number(assetType) === 2;
-
-  const assetName = isETH ? 'ETH' : isWBTC ? 'WBTC' : 'USDC';
-  const assetColor = isETH ? 'orange' : isWBTC ? 'purple' : 'blue';
-
-  const gradients = {
-    blue: 'from-blue-500 to-cyan-500',
-    orange: 'from-orange-500 to-red-500',
-    purple: 'from-purple-500 to-pink-500',
+  const togglePanel = (next: 'topup' | 'forward') => {
+    setError(null);
+    setPanel((current) => (current === next ? null : next));
   };
 
+  const runAction = async (action: () => Promise<string>, title: string, onDone?: () => void) => {
+    setError(null);
+    try {
+      const hash = await action();
+      toast({
+        title,
+        description: (
+          <a className="font-semibold underline" href={explorerTxUrl(hash)} target="_blank" rel="noopener noreferrer">
+            View transaction
+          </a>
+        ),
+      });
+      onDone?.();
+    } catch (err) {
+      console.error(`${title} failed:`, err);
+      setError(getTxErrorMessage(err));
+    }
+  };
+
+  const amountText = formatAmount(lock.amount, asset.decimals, asset.displayDecimals);
+
   return (
-    <Card className="shadow-lg hover:shadow-xl transition-all overflow-hidden border-0">
-      {/* Gradient Top Border */}
-      <div className={`h-1.5 bg-gradient-to-r ${gradients[assetColor]}`}></div>
-
-      <CardHeader className="pb-4">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <div className={`p-3 rounded-xl bg-gradient-to-br ${gradients[assetColor]} shadow-lg`}>
-              <DollarSign className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <CardTitle className="text-xl">{assetName} Deposit #{depositId}</CardTitle>
-              <CardDescription className="text-xs mt-1">
-                {formatDateTime(depositTime)}
-              </CardDescription>
-            </div>
+    <article
+      className={cn(
+        'rounded-3xl border bg-card p-5 shadow-card transition sm:p-6',
+        status === 'ready' ? 'border-success/40 ring-1 ring-success/20' : 'border-border',
+        status === 'closed' && 'bg-card/60'
+      )}
+    >
+      <header className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <AssetIcon asset={asset} className="h-10 w-10" />
+          <div className="min-w-0">
+            <p className={cn('truncate font-display text-2xl font-bold tabular leading-tight', status === 'closed' && 'text-muted-foreground')}>
+              {amountText} <span className="text-base font-semibold text-muted-foreground">{asset.symbol}</span>
+            </p>
+            <p className="text-xs text-muted-foreground">
+              Lock #{lock.id} · {months}-month · started {formatShortDate(start)}
+            </p>
           </div>
-
-          {/* Status Badge */}
-          {isWithdrawn ? (
-            <Badge variant="secondary" className="gap-1.5">
-              <CheckCircle2 className="h-3.5 w-3.5" />
-              Withdrawn
-            </Badge>
-          ) : unlocked ? (
-            <Badge className="gap-1.5 bg-green-500 hover:bg-green-600 animate-pulse">
-              <Unlock className="h-3.5 w-3.5" />
-              Ready
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="gap-1.5">
-              <Lock className="h-3.5 w-3.5" />
-              Locked
-            </Badge>
-          )}
         </div>
-      </CardHeader>
+        <StatusPill status={status} />
+      </header>
 
-      <CardContent className="space-y-4">
-        {/* Amount Display */}
-        <div className="bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl p-4">
-          <p className="text-sm text-gray-600 mb-1">Total Amount</p>
-          <p className="text-3xl font-black text-gray-900">
-            {isETH ? formatETH(amount) : isWBTC ? (Number(amount) / 1e8).toFixed(8) : formatUSDC(amount)}
-            <span className="text-xl font-semibold text-gray-500 ml-2">{assetName}</span>
-          </p>
-        </div>
-
-        {/* Time Info */}
-        {!isWithdrawn && (
-          <div className="flex items-center gap-3 text-sm">
-            <Clock className="h-4 w-4 text-gray-400" />
-            <span className="text-gray-600">
-              {unlocked ? (
-                <span className="text-green-600 font-semibold">Unlocked! Withdraw anytime</span>
-              ) : (
-                <>Unlocks in <span className="font-semibold text-gray-900">{timeRemaining}</span></>
-              )}
+      {status !== 'closed' && (
+        <div className="mt-5">
+          <div
+            className="h-2 overflow-hidden rounded-full bg-secondary"
+            role="progressbar"
+            aria-valuenow={Math.round(progress)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-label="Lock progress"
+          >
+            <div
+              className={cn('h-full rounded-full transition-[width] duration-700', status === 'ready' ? 'bg-success' : 'bg-ink')}
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <div className="mt-2 flex justify-between text-xs">
+            <span className="font-medium tabular">
+              {status === 'ready' ? 'Unlocked — ready to withdraw' : formatCountdown(lock.unlockTime - now)}
+            </span>
+            <span className="text-muted-foreground">
+              {status === 'ready' ? 'since' : 'unlocks'} {formatShortDate(lock.unlockTime)}
             </span>
           </div>
-        )}
+        </div>
+      )}
 
-        <Separator />
+      {status === 'closed' && (
+        <p className="mt-3 text-xs text-muted-foreground">Closed · was due {formatShortDate(lock.unlockTime)}</p>
+      )}
 
-        {/* Actions */}
-        {!isWithdrawn && (
-          <div className="space-y-3">
-            {/* Top Up Section */}
-            {!showTopUp ? (
-              <Button
-                onClick={() => setShowTopUp(true)}
-                variant="outline"
-                className="w-full gap-2"
-              >
-                <Plus className="h-4 w-4" />
-                Top Up Deposit
-              </Button>
-            ) : (
-              <div className="space-y-3 p-4 bg-purple-50 rounded-xl border border-purple-200">
-                <div className="flex items-center justify-between">
-                  <Label className="text-sm font-semibold text-purple-900">Add More {assetName}</Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setShowTopUp(false);
-                      setTopUpAmount('');
-                    }}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-                <Input
-                  type="number"
-                  value={topUpAmount}
-                  onChange={(e) => setTopUpAmount(e.target.value)}
-                  placeholder={`Amount in ${assetName}`}
-                  step={isETH ? "0.01" : isWBTC ? "0.00000001" : "0.01"}
-                />
-                <Button
-                  onClick={() => onTopUp(depositId, Number(assetType))}
-                  disabled={isPending || !topUpAmount || parseFloat(topUpAmount) <= 0}
-                  className="w-full bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
-                >
-                  {isPending ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>Add {topUpAmount || '0'} {assetName}</>
-                  )}
-                </Button>
-              </div>
+      {status === 'locked' && (
+        <div className="mt-5">
+          <button
+            type="button"
+            onClick={() => togglePanel('topup')}
+            disabled={blocked && panel !== 'topup'}
+            className={cn(
+              'inline-flex h-11 w-full items-center justify-center gap-2 rounded-2xl border text-sm font-semibold transition disabled:opacity-50 sm:w-auto sm:px-5',
+              panel === 'topup' ? 'border-foreground bg-foreground/[0.03]' : 'border-border hover:border-foreground/40'
             )}
+          >
+            {panel === 'topup' ? <X className="h-4 w-4" /> : <Plus className="h-4 w-4" />}
+            {panel === 'topup' ? 'Cancel' : 'Top up'}
+          </button>
+        </div>
+      )}
 
-            {/* Withdraw or Forward Section */}
-            {unlocked && (
-              <>
-                <Button
-                  onClick={() => onWithdraw(depositId)}
-                  disabled={isPending}
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 gap-2"
-                  size="lg"
-                >
-                  {isPending ? (
-                    <>
-                      <Loader2 className="h-5 w-5 animate-spin" />
-                      Processing...
-                    </>
-                  ) : (
-                    <>
-                      <CheckCircle2 className="h-5 w-5" />
-                      Withdraw to Wallet
-                    </>
-                  )}
-                </Button>
-
-                {/* Forward Option */}
-                {!showForward ? (
-                  <Button
-                    onClick={() => setShowForward(true)}
-                    variant="outline"
-                    className="w-full gap-2"
-                  >
-                    <Send className="h-4 w-4" />
-                    Send to Another Address
-                  </Button>
-                ) : (
-                  <div className="space-y-3 p-4 bg-blue-50 rounded-xl border border-blue-200">
-                    <div className="flex items-center justify-between">
-                      <Label className="text-sm font-semibold text-blue-900">Forward Address</Label>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setShowForward(false);
-                          setForwardingTo('');
-                        }}
-                      >
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <Input
-                      type="text"
-                      value={forwardingTo}
-                      onChange={(e) => setForwardingTo(e.target.value)}
-                      placeholder="0x..."
-                      className="font-mono text-sm"
-                    />
-                    <Button
-                      onClick={() => onForward(depositId)}
-                      disabled={isPending || !forwardingTo}
-                      className="w-full bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700"
-                    >
-                      {isPending ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Processing...
-                        </>
-                      ) : (
-                        <>
-                          <Send className="mr-2 h-4 w-4" />
-                          Forward Funds
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                )}
-              </>
+      {status === 'ready' && (
+        <div className="mt-5 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto]">
+          <button
+            type="button"
+            onClick={() => runAction(() => withdraw(lock.id), 'Withdrawn to your wallet')}
+            disabled={blocked}
+            className="inline-flex h-12 items-center justify-center gap-2 rounded-2xl bg-success text-sm font-semibold text-white transition hover:bg-success/90 disabled:opacity-50"
+          >
+            {isPendingKey('withdraw') ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
+            {isPendingKey('withdraw') ? 'Withdrawing…' : `Withdraw ${amountText} ${asset.symbol}`}
+          </button>
+          <button
+            type="button"
+            onClick={() => togglePanel('forward')}
+            disabled={blocked && panel !== 'forward'}
+            className={cn(
+              'inline-flex h-12 items-center justify-center gap-2 rounded-2xl border px-5 text-sm font-semibold transition disabled:opacity-50',
+              panel === 'forward' ? 'border-foreground bg-foreground/[0.03]' : 'border-border hover:border-foreground/40'
             )}
+          >
+            {panel === 'forward' ? <X className="h-4 w-4" /> : <Send className="h-4 w-4" />}
+            {panel === 'forward' ? 'Cancel' : 'Send elsewhere'}
+          </button>
+        </div>
+      )}
+
+      {panel === 'topup' && status === 'locked' && (
+        <div className="mt-3 rounded-2xl bg-secondary p-3 sm:p-4">
+          <label htmlFor={`topup-${lock.id}`} className="text-xs font-semibold">
+            Add {asset.symbol} to this lock
+            {balance !== undefined && (
+              <span className="ml-1 font-normal text-muted-foreground">
+                · balance {formatAmount(balance, asset.decimals, asset.displayDecimals)}
+              </span>
+            )}
+          </label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <div className={cn('flex h-12 items-center rounded-xl border bg-card px-3 sm:flex-1', topUpTooBig ? 'border-destructive' : 'border-input')}>
+              <input
+                id={`topup-${lock.id}`}
+                inputMode="decimal"
+                autoComplete="off"
+                placeholder="0.00"
+                value={topUpAmount}
+                onChange={(e) => setTopUpAmount(sanitizeAmountInput(e.target.value, asset.decimals))}
+                className="w-0 min-w-0 flex-1 bg-transparent font-display text-lg font-semibold tabular outline-none"
+              />
+              <span className="text-sm font-semibold text-muted-foreground">{asset.symbol}</span>
+            </div>
+            <button
+              type="button"
+              disabled={blocked || !parsedTopUp || topUpTooBig}
+              onClick={() =>
+                parsedTopUp &&
+                runAction(() => topUp(asset.symbol, lock.id, parsedTopUp), `Added ${topUpAmount} ${asset.symbol}`, () => {
+                  setTopUpAmount('');
+                  setPanel(null);
+                })
+              }
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:opacity-40"
+            >
+              {isPendingKey('topup') && <Loader2 className="h-4 w-4 animate-spin" />}
+              {isPendingKey('topup')
+                ? pending?.step === 'approve'
+                  ? `Approving ${asset.symbol}…`
+                  : 'Adding…'
+                : topUpTooBig
+                  ? `Not enough ${asset.symbol}`
+                  : 'Add to lock'}
+            </button>
           </div>
-        )}
-      </CardContent>
-    </Card>
+          <p className="mt-2 text-[11px] text-muted-foreground">Top-ups keep the original unlock date of {formatShortDate(lock.unlockTime)}.</p>
+        </div>
+      )}
+
+      {panel === 'forward' && status === 'ready' && (
+        <div className="mt-3 rounded-2xl bg-secondary p-3 sm:p-4">
+          <label htmlFor={`forward-${lock.id}`} className="text-xs font-semibold">
+            Destination address
+          </label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <input
+              id={`forward-${lock.id}`}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder="0x…"
+              value={forwardTo}
+              onChange={(e) => setForwardTo(e.target.value.trim())}
+              className={cn(
+                'h-12 w-full min-w-0 rounded-xl sm:flex-1 border bg-card px-3 font-mono text-sm outline-none',
+                forwardTo && !forwardValid ? 'border-destructive' : 'border-input'
+              )}
+            />
+            <button
+              type="button"
+              disabled={blocked || !forwardValid}
+              onClick={() =>
+                runAction(() => forward(lock.id, forwardTo as Address), 'Funds sent', () => {
+                  setForwardTo('');
+                  setPanel(null);
+                })
+              }
+              className="inline-flex h-12 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-semibold text-primary-foreground disabled:opacity-40"
+            >
+              {isPendingKey('forward') ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {isPendingKey('forward') ? 'Sending…' : 'Send'}
+            </button>
+          </div>
+          <p className="mt-2 text-[11px] text-muted-foreground">
+            {forwardTo && !forwardValid
+              ? 'That doesn’t look like a valid address.'
+              : `Sends the full ${amountText} ${asset.symbol}. Double-check the address — this can’t be undone.`}
+          </p>
+        </div>
+      )}
+
+      {error && (
+        <div role="alert" className="mt-3 flex items-start gap-2.5 rounded-2xl bg-destructive-soft p-3.5 text-sm text-destructive">
+          <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
+          <p>{error}</p>
+        </div>
+      )}
+    </article>
+  );
+}
+
+function StatusPill({ status }: { status: Status }) {
+  const styles = {
+    locked: { label: 'Locked', icon: Lock, className: 'bg-secondary text-foreground' },
+    ready: { label: 'Ready', icon: Unlock, className: 'bg-success-soft text-success' },
+    closed: { label: 'Closed', icon: CheckCircle2, className: 'bg-secondary text-muted-foreground' },
+  }[status];
+
+  return (
+    <span className={cn('inline-flex shrink-0 items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold', styles.className)}>
+      <styles.icon className="h-3.5 w-3.5" />
+      {styles.label}
+    </span>
   );
 }
