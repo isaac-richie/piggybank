@@ -66,6 +66,75 @@ export const usePortfolio = () => {
   };
 };
 
+export const useOwnership = () => {
+  const { address } = useAccount();
+  const { data } = useReadContracts({
+    allowFailure: false,
+    contracts: [
+      { ...vault, functionName: 'owner' },
+      { ...vault, functionName: 'pendingOwner' },
+    ],
+    query: { refetchInterval: 60_000 },
+  });
+  const [owner, pendingOwner] = (data ?? []) as (Address | undefined)[];
+  const same = (a?: string) => !!a && !!address && a.toLowerCase() === address.toLowerCase();
+  return { owner, pendingOwner, isOwner: same(owner), isPendingOwner: same(pendingOwner) };
+};
+
+// Vault-wide health for the admin panel: what is owed versus what is held.
+export const useVaultHealth = () => {
+  const { data, isLoading } = useReadContracts({
+    allowFailure: false,
+    contracts: [
+      { ...vault, functionName: 'totalReservedUSDC' },
+      { ...vault, functionName: 'totalReservedETH' },
+      { ...vault, functionName: 'totalReservedWBTC' },
+      { ...vault, functionName: 'getContractBalance' },
+      { ...vault, functionName: 'getContractETHBalance' },
+      { ...vault, functionName: 'getContractWBTCBalance' },
+      { ...vault, functionName: 'paused' },
+      { ...vault, functionName: 'whitelistEnabled' },
+    ],
+    query: { refetchInterval: REFRESH_MS },
+  });
+  const [rUsdc, rEth, rWbtc, hUsdc, hEth, hWbtc, paused, whitelistEnabled] = (data ?? []) as [
+    bigint, bigint, bigint, bigint, bigint, bigint, boolean, boolean,
+  ];
+  return {
+    isLoading: isLoading || !data,
+    reserved: { USDC: rUsdc ?? 0n, ETH: rEth ?? 0n, WBTC: rWbtc ?? 0n } as Record<AssetSymbol, bigint>,
+    held: { USDC: hUsdc ?? 0n, ETH: hEth ?? 0n, WBTC: hWbtc ?? 0n } as Record<AssetSymbol, bigint>,
+    paused: !!paused,
+    whitelistEnabled: !!whitelistEnabled,
+  };
+};
+
+// Every deposit for any user (admin lookups), in pages of 200 via getDeposits.
+export const useUserLocks = (user: Address | undefined) => {
+  const { data, isLoading, refetch } = useReadContract({
+    ...vault,
+    functionName: 'getDeposits',
+    args: [user as Address, 0n, 200n],
+    query: { enabled: !!user },
+  });
+  const locks: Lock[] = ((data ?? []) as DepositData[]).map((d, id) => ({
+    ...d,
+    id,
+    unlockTime: Number(d.depositTime + d.lockDuration),
+  }));
+  return { locks, isLoading: !!user && isLoading, refetch };
+};
+
+export const useIsWhitelisted = (user: Address | undefined) => {
+  const { data } = useReadContract({
+    ...vault,
+    functionName: 'isWhitelisted',
+    args: [user as Address],
+    query: { enabled: !!user },
+  });
+  return data as boolean | undefined;
+};
+
 export const useVaultStatus = () => {
   const { data: isPaused = false } = useReadContract({
     ...vault,
@@ -199,7 +268,11 @@ export const useVaultActions = () => {
   const forward = (depositId: number, to: Address) =>
     run(`forward-${depositId}`, () => write('forwardDeposit', [BigInt(depositId), to]));
 
-  return { deposit, topUp, withdraw, forward, pending, isBusy: pending !== null };
+  // Owner-only calls from the admin panel; the contract enforces onlyOwner.
+  const admin = (key: string, functionName: string, args: readonly unknown[] = []) =>
+    run(key, () => write(functionName, args));
+
+  return { deposit, topUp, withdraw, forward, admin, pending, isBusy: pending !== null };
 };
 
 export const explorerTxUrl = (hash: string) => `${NETWORK_CONFIG.blockExplorer}/tx/${hash}`;
