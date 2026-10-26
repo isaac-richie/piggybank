@@ -4,7 +4,9 @@ import TimelockABI from "./TimelockPiggyBank.abi.json";
 // ============================================
 // BASE MAINNET - PRODUCTION (LIVE)
 // ============================================
-export const CONTRACT_ADDRESS = "0xC5c0b76ebBF263DC4D28beA09B6F7BA2C023e820"; // Deployed on Base Mainnet
+// Set NEXT_PUBLIC_CONTRACT_ADDRESS to point the app at a new deployment without a code change.
+export const CONTRACT_ADDRESS =
+  process.env.NEXT_PUBLIC_CONTRACT_ADDRESS || "0xC5c0b76ebBF263DC4D28beA09B6F7BA2C023e820"; // Deployed on Base Mainnet
 export const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"; // Base Mainnet USDC
 export const WBTC_ADDRESS = "0x0555E30da8f98308EdB960aa94C0Db47230d2B9c"; // Base Mainnet WBTC
 

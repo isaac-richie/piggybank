@@ -643,7 +643,25 @@ contract TimelockPiggyBankTest is Test {
 
         timelockPiggyBank.transferOwnership(newOwner);
 
+        // Two-step: nothing changes until the new owner accepts
+        assertEq(timelockPiggyBank.owner(), owner);
+        assertEq(timelockPiggyBank.pendingOwner(), newOwner);
+
+        vm.prank(newOwner);
+        timelockPiggyBank.acceptOwnership();
+
         assertEq(timelockPiggyBank.owner(), newOwner);
+    }
+
+    function testOnlyPendingOwnerCanAcceptOwnership() public {
+        address newOwner = makeAddr("newOwner");
+        timelockPiggyBank.transferOwnership(newOwner);
+
+        vm.prank(user1);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        timelockPiggyBank.acceptOwnership();
+
+        assertEq(timelockPiggyBank.owner(), owner);
     }
 
     function testTransferOwnershipToZeroAddress() public {
@@ -679,6 +697,8 @@ contract TimelockPiggyBankTest is Test {
 
         // Transfer ownership
         timelockPiggyBank.transferOwnership(newOwner);
+        vm.prank(newOwner);
+        timelockPiggyBank.acceptOwnership();
 
         // New owner should be able to pause
         vm.prank(newOwner);
@@ -706,6 +726,8 @@ contract TimelockPiggyBankTest is Test {
 
         // Transfer ownership
         timelockPiggyBank.transferOwnership(newOwner);
+        vm.prank(newOwner);
+        timelockPiggyBank.acceptOwnership();
 
         // Old owner should not be able to pause
         vm.expectRevert();
@@ -733,6 +755,8 @@ contract TimelockPiggyBankTest is Test {
 
         // Transfer ownership
         timelockPiggyBank.transferOwnership(newOwner);
+        vm.prank(newOwner);
+        timelockPiggyBank.acceptOwnership();
 
         // Deposits should still be accessible
         assertEq(timelockPiggyBank.getUserDepositCount(user1), 2);

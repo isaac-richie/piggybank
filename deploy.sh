@@ -75,6 +75,7 @@ echo "⚠️  This will use your private key. Make sure you're using a dedicated
 if [ "$NETWORK" = "base" ]; then
     echo "⚠️  WARNING: You are deploying to MAINNET!"
     echo "⚠️  This will use REAL funds and is irreversible!"
+    echo "   Owner after deploy: ${OWNER:-deployer wallet}"
     read -p "🤔 Are you ABSOLUTELY SURE you want to deploy to MAINNET? (yes/N): " -r
     echo
     if [[ ! $REPLY = "yes" ]]; then
@@ -92,7 +93,13 @@ fi
 
 # Deploy with verification
 echo "📝 Deploying contract..."
-forge script script/Deploy.s.sol --rpc-url $RPC_URL --broadcast --verify
+VERIFY_FLAGS=()
+if [ -n "$BASESCAN_API_KEY" ]; then
+    VERIFY_FLAGS=(--verify --etherscan-api-key "$BASESCAN_API_KEY")
+else
+    echo "⚠️  BASESCAN_API_KEY not set - skipping source verification"
+fi
+forge script script/Deploy.s.sol --rpc-url "$RPC_URL" --private-key "$PRIVATE_KEY" --broadcast "${VERIFY_FLAGS[@]}"
 
 echo "✅ Deployment completed!"
 echo "🔍 Check your contract on $NETWORK_NAME Explorer:"

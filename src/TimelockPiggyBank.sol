@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import "openzeppelin-contracts/contracts/token/ERC20/IERC20.sol";
 import "openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol";
 import "openzeppelin-contracts/contracts/utils/ReentrancyGuard.sol";
-import "openzeppelin-contracts/contracts/access/Ownable.sol";
+import "openzeppelin-contracts/contracts/access/Ownable2Step.sol";
 import "openzeppelin-contracts/contracts/utils/Pausable.sol";
 
 /**
@@ -12,7 +12,7 @@ import "openzeppelin-contracts/contracts/utils/Pausable.sol";
  * @dev A secure timelock contract for USDC deposits with multiple lock durations
  * @notice Users can deposit USDC for 3, 6, 9, or 12 months and withdraw after unlock
  */
-contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
+contract TimelockPiggyBank is ReentrancyGuard, Ownable2Step, Pausable {
     using SafeERC20 for IERC20;
 
     // Lock duration options in seconds (converted from months)
@@ -511,7 +511,7 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
         if (to == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
 
-        uint256 reserved;
+        uint256 reserved = 0;
         if (token == address(usdcToken)) {
             reserved = totalReservedUSDC;
         }
@@ -613,12 +613,12 @@ contract TimelockPiggyBank is ReentrancyGuard, Ownable, Pausable {
     }
 
     /**
-     * @dev Transfer ownership of the contract (owner only)
-     * @param newOwner Address of the new owner
+     * @dev Start a two-step ownership transfer (owner only); `newOwner` must call acceptOwnership
+     * @param newOwner Address of the proposed owner
      */
     function transferOwnership(address newOwner) public override onlyOwner {
         if (newOwner == address(0)) revert ZeroAddress();
-        _transferOwnership(newOwner);
+        super.transferOwnership(newOwner);
     }
 
     /**

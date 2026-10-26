@@ -76,10 +76,7 @@ export function DepositForm({ onCreated }: { onCreated?: () => void }) {
 
   return (
     <form onSubmit={handleSubmit} className="rounded-3xl border border-border bg-card p-5 shadow-card sm:p-6">
-      <div className="flex items-center justify-between">
-        <h2 className="font-display text-xl font-bold">New lock</h2>
-        <span className="text-xs font-medium text-muted-foreground">Step-by-step · ~1 min</span>
-      </div>
+      <h2 className="font-display text-xl font-bold">New lock</h2>
 
       {/* Asset */}
       <fieldset className="mt-5">
