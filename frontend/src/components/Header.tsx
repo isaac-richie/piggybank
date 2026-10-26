@@ -1,8 +1,10 @@
 'use client';
 
-import { PiggyBank, Github, ArrowUpRight } from 'lucide-react';
+import Link from 'next/link';
+import { PiggyBank, Github, ArrowUpRight, ShieldCheck } from 'lucide-react';
 import { ConnectButton } from '@rainbow-me/rainbowkit';
 import { CONTRACT_ADDRESS, NETWORK_CONFIG } from '@/lib/contracts';
+import { useOwnership } from '@/hooks/useContract';
 
 export function Logo() {
   return (
@@ -16,12 +18,25 @@ export function Logo() {
 }
 
 export function Header() {
+  const { isOwner, isPendingOwner } = useOwnership();
+
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-background/80 backdrop-blur-lg">
       <div className="container flex h-16 items-center justify-between gap-3">
-        <Logo />
+        <Link href="/" aria-label="AssetStrategy home">
+          <Logo />
+        </Link>
 
         <div className="flex items-center gap-1 sm:gap-2">
+          {(isOwner || isPendingOwner) && (
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-accent sm:px-3"
+            >
+              <ShieldCheck className="h-4 w-4" />
+              <span className="hidden sm:inline">Admin</span>
+            </Link>
+          )}
           <nav className="hidden items-center md:flex">
             <a
               href={`${NETWORK_CONFIG.blockExplorer}/address/${CONTRACT_ADDRESS}`}
